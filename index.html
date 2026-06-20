@@ -55,6 +55,10 @@
               <span id="currentUserName">Chưa đăng nhập</span>
               <strong id="currentRole">-</strong>
             </div>
+            <div class="user-pill">
+              <span>CSDL</span>
+              <strong id="dbStatus">Local demo</strong>
+            </div>
             <button id="resetDemo" class="ghost danger admin-only" type="button">Làm mới demo</button>
             <button id="logoutButton" class="ghost" type="button">Đăng xuất</button>
           </div>
@@ -247,6 +251,8 @@
       </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="./src/config.js"></script>
     <script src="./src/main.js"></script>
   </body>
 </html>

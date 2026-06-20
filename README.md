@@ -38,9 +38,30 @@ Dữ liệu demo lưu trong `localStorage` của trình duyệt. Đăng nhập a
 
 ## CSDL hiện tại
 
-Prototype này đang dùng `localStorage` của trình duyệt làm nơi lưu dữ liệu tạm, gồm danh sách thành viên, sổ quỹ và phiên đăng nhập demo. Vì vậy dữ liệu chỉ nằm trên máy/trình duyệt đang mở app, chưa đồng bộ giữa nhiều người và chưa có bảo mật backend.
+Prototype này hỗ trợ 2 chế độ:
 
-Khi làm bản thật nên chuyển sang PostgreSQL, MySQL hoặc Supabase/Firebase. Các thao tác cộng tiền, trừ tiền, phân quyền và đối soát ngân hàng phải xử lý ở backend.
+- Nếu `src/config.js` chưa có Supabase URL/key, app dùng `localStorage` của trình duyệt để chạy demo.
+- Nếu đã cấu hình Supabase, app đọc/ghi dữ liệu vào PostgreSQL qua Supabase.
+
+## Tạo CSDL Supabase/PostgreSQL
+
+1. Tạo project mới trên Supabase.
+2. Vào `SQL Editor` và chạy toàn bộ file [supabase/schema.sql](supabase/schema.sql).
+3. Vào `Project Settings` -> `API`.
+4. Copy `Project URL` và `anon public key`.
+5. Mở [src/config.js](src/config.js) và điền:
+
+```js
+window.APP_CONFIG = {
+  supabaseUrl: "https://PROJECT_ID.supabase.co",
+  supabaseAnonKey: "ANON_PUBLIC_KEY",
+  fundId: "quy-an-choi-demo",
+};
+```
+
+Sau khi deploy lại GitHub Pages, trạng thái `CSDL` trên giao diện sẽ chuyển từ `Local demo` sang `Supabase/PostgreSQL`.
+
+Lưu ý: policy trong `supabase/schema.sql` đang mở đọc/ghi cho anon key để prototype chạy ngay trên GitHub Pages. Bản thật phải thay bằng Supabase Auth + RLS theo vai trò admin/thành viên, và các thao tác cộng/trừ tiền quan trọng nên xử lý qua backend hoặc Edge Functions.
 
 ## Nguyên tắc tính tiền
 

@@ -7,6 +7,9 @@ const currency = new Intl.NumberFormat("vi-VN", {
   maximumFractionDigits: 0,
 });
 
+const CONFIG = window.APP_CONFIG || {};
+const FUND_ID = CONFIG.fundId || "quy-an-choi-demo";
+
 const els = {
   loginScreen: document.querySelector("#loginScreen"),
   appShell: document.querySelector("#appShell"),
@@ -16,6 +19,7 @@ const els = {
   loginMessage: document.querySelector("#loginMessage"),
   currentUserName: document.querySelector("#currentUserName"),
   currentRole: document.querySelector("#currentRole"),
+  dbStatus: document.querySelector("#dbStatus"),
   logoutButton: document.querySelector("#logoutButton"),
   totalFund: document.querySelector("#totalFund"),
   totalSpent: document.querySelector("#totalSpent"),
@@ -45,6 +49,10 @@ const els = {
   resetDemo: document.querySelector("#resetDemo"),
 };
 
+let cloudClient = createCloudClient();
+let cloudLoaded = false;
+let cloudSaveTimer = null;
+let cloudStatus = cloudClient ? "Đang chờ đồng bộ" : "Local demo";
 let state = loadState();
 let session = loadSession();
 
@@ -72,11 +80,14 @@ function loadState() {
       makeLedger("deposit", members[1].id, 400000, "Nộp quỹ ban đầu", now - 800000),
       makeLedger("deposit", members[2].id, 300000, "Nộp quỹ ban đầu", now - 700000),
     ],
+    events: [],
+    eventParticipants: [],
   };
 }
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  queueCloudSave();
 }
 
 function loadSession() {
@@ -96,6 +107,238 @@ function saveSession() {
   } else {
     localStorage.removeItem(SESSION_KEY);
   }
+}
+
+function createCloudClient() {
+  const url = (CONFIG.supabaseUrl || "").trim();
+  const anonKey = (CONFIG.supabaseAnonKey || "").trim();
+  if (!url || !anonKey || !window.supabase?.createClient) return null;
+  return window.supabase.createClient(url, anonKey);
+}
+
+async function loadCloudState() {
+  if (!cloudClient) {
+    cloudStatus = "Local demo";
+    return false;
+  }
+
+  try {
+    cloudStatus = "Đang kết nối";
+    renderDbStatus();
+
+    const fundResult = await cloudClient.from("funds").upsert({
+      id: FUND_ID,
+      name: "Quỹ Ăn Chơi",
+      updated_at: new Date().toISOString(),
+    });
+    if (fundResult.error) throw fundResult.error;
+
+    const membersResult = await cloudClient
+      .from("fund_members")
+      .select("*")
+      .eq("fund_id", FUND_ID)
+      .order("created_at", { ascending: true });
+
+    if (membersResult.error) throw membersResult.error;
+
+    if (!membersResult.data.length) {
+      cloudLoaded = true;
+      cloudStatus = "Supabase/PostgreSQL";
+      await saveCloudStateNow();
+      return true;
+    }
+
+    const ledgerResult = await cloudClient
+      .from("ledger_entries")
+      .select("*")
+      .eq("fund_id", FUND_ID)
+      .order("created_at", { ascending: true });
+
+    if (ledgerResult.error) throw ledgerResult.error;
+
+    const eventsResult = await cloudClient
+      .from("events")
+      .select("*")
+      .eq("fund_id", FUND_ID)
+      .order("created_at", { ascending: true });
+
+    if (eventsResult.error) throw eventsResult.error;
+
+    let eventParticipants = [];
+    if (eventsResult.data.length) {
+      const participantsResult = await cloudClient
+        .from("event_participants")
+        .select("*")
+        .in(
+          "event_id",
+          eventsResult.data.map((item) => item.id),
+        );
+
+      if (participantsResult.error) throw participantsResult.error;
+      eventParticipants = participantsResult.data || [];
+    }
+
+    state = {
+      members: membersResult.data.map(memberFromRow),
+      ledger: ledgerResult.data.map(ledgerFromRow),
+      events: eventsResult.data.map(eventFromRow),
+      eventParticipants: eventParticipants.map(eventParticipantFromRow),
+    };
+    if (session?.role === "member" && state.members[0]) {
+      session.memberId = state.members[0].id;
+      session.name = state.members[0].name;
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    cloudLoaded = true;
+    cloudStatus = "Supabase/PostgreSQL";
+    return true;
+  } catch (error) {
+    console.error("Không kết nối được Supabase", error);
+    cloudLoaded = false;
+    cloudStatus = "Local demo (lỗi Supabase)";
+    return false;
+  }
+}
+
+function queueCloudSave() {
+  if (!session || !cloudClient || !cloudLoaded) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(() => {
+    saveCloudStateNow().catch((error) => {
+      console.error("Không lưu được Supabase", error);
+      cloudStatus = "Local demo (lỗi lưu)";
+      renderDbStatus();
+    });
+  }, 350);
+}
+
+async function saveCloudStateNow() {
+  if (!cloudClient) return;
+
+  const fundResult = await cloudClient.from("funds").upsert({
+    id: FUND_ID,
+    name: "Quỹ Ăn Chơi",
+    updated_at: new Date().toISOString(),
+  });
+  if (fundResult.error) throw fundResult.error;
+
+  if (state.members.length) {
+    const { error } = await cloudClient.from("fund_members").upsert(state.members.map(memberToRow));
+    if (error) throw error;
+  }
+
+  if ((state.events || []).length) {
+    const { error } = await cloudClient.from("events").upsert((state.events || []).map(eventToRow));
+    if (error) throw error;
+  }
+
+  if (state.ledger.length) {
+    const { error } = await cloudClient.from("ledger_entries").upsert(state.ledger.map(ledgerToRow));
+    if (error) throw error;
+  }
+
+  if ((state.eventParticipants || []).length) {
+    const { error } = await cloudClient
+      .from("event_participants")
+      .upsert((state.eventParticipants || []).map(eventParticipantToRow));
+    if (error) throw error;
+  }
+
+  cloudStatus = "Supabase/PostgreSQL";
+  renderDbStatus();
+}
+
+function memberToRow(member) {
+  return {
+    id: member.id,
+    fund_id: FUND_ID,
+    name: member.name,
+    wallet: member.wallet || null,
+    code: member.code,
+    created_at: new Date(member.createdAt || Date.now()).toISOString(),
+  };
+}
+
+function memberFromRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    wallet: row.wallet || "",
+    code: row.code,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function ledgerToRow(entry) {
+  return {
+    id: entry.id,
+    fund_id: FUND_ID,
+    member_id: entry.memberId || null,
+    type: entry.type,
+    amount: entry.amount,
+    note: entry.note || null,
+    event_id: entry.eventId || null,
+    event_name: entry.eventName || null,
+    created_at: new Date(entry.createdAt || Date.now()).toISOString(),
+  };
+}
+
+function ledgerFromRow(row) {
+  return {
+    id: row.id,
+    type: row.type,
+    memberId: row.member_id,
+    amount: Number(row.amount) || 0,
+    note: row.note || "",
+    eventId: row.event_id || null,
+    eventName: row.event_name || "",
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function eventToRow(item) {
+  return {
+    id: item.id,
+    fund_id: FUND_ID,
+    name: item.name,
+    total_amount: item.totalAmount,
+    guest_amount: item.guestAmount || 0,
+    guest_owner_member_id: item.guestOwnerMemberId || null,
+    split_mode: item.splitMode,
+    created_by: item.createdBy || null,
+    created_at: new Date(item.createdAt || Date.now()).toISOString(),
+  };
+}
+
+function eventFromRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    totalAmount: Number(row.total_amount) || 0,
+    guestAmount: Number(row.guest_amount) || 0,
+    guestOwnerMemberId: row.guest_owner_member_id || null,
+    splitMode: row.split_mode,
+    createdBy: row.created_by || "",
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function eventParticipantToRow(item) {
+  return {
+    event_id: item.eventId,
+    member_id: item.memberId,
+    charged_amount: item.chargedAmount,
+    note: item.note || null,
+  };
+}
+
+function eventParticipantFromRow(row) {
+  return {
+    eventId: row.event_id,
+    memberId: row.member_id,
+    chargedAmount: Number(row.charged_amount) || 0,
+    note: row.note || "",
+  };
 }
 
 function demoAccounts() {
@@ -208,6 +451,7 @@ function render() {
   saveState();
   saveSession();
   renderAuth();
+  renderDbStatus();
   if (!session) return;
   renderStats();
   renderMemberOptions();
@@ -216,6 +460,12 @@ function render() {
   renderQrBoard();
   renderEventPreview();
   renderLedger();
+}
+
+function renderDbStatus() {
+  if (els.dbStatus) {
+    els.dbStatus.textContent = cloudStatus;
+  }
 }
 
 function renderAuth() {
@@ -485,7 +735,7 @@ function escapeHtml(value) {
 }
 
 function bindEvents() {
-  els.loginForm.addEventListener("submit", (event) => {
+  els.loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const account = demoAccounts()[els.loginAccount.value];
     if (!account || els.loginPassword.value !== account.password) {
@@ -501,6 +751,7 @@ function bindEvents() {
     els.loginPassword.value = "";
     els.loginMessage.textContent = "";
     activateTab("members");
+    await loadCloudState();
     render();
   });
 
@@ -589,9 +840,29 @@ function bindEvents() {
       return;
     }
     const eventName = els.eventName.value.trim() || "Buổi ăn/nhậu";
+    const eventId = makeId("event");
+    state.events = state.events || [];
+    state.eventParticipants = state.eventParticipants || [];
+    state.events.push({
+      id: eventId,
+      name: eventName,
+      totalAmount: Number(els.eventAmount.value) || 0,
+      guestAmount: Number(els.guestAmount.value) || 0,
+      guestOwnerMemberId: els.guestOwner.value || null,
+      splitMode: els.splitMode.value,
+      createdBy: session?.email || "",
+      createdAt: Date.now(),
+    });
     for (const share of shares) {
+      state.eventParticipants.push({
+        eventId,
+        memberId: share.member.id,
+        chargedAmount: share.amount,
+        note: share.reason,
+      });
       state.ledger.push(
         makeLedger("event-share", share.member.id, share.amount, share.reason, Date.now(), {
+          eventId,
           eventName,
         }),
       );
@@ -611,5 +882,12 @@ function bindEvents() {
   });
 }
 
+async function init() {
+  if (session) {
+    await loadCloudState();
+  }
+  render();
+}
+
 bindEvents();
-render();
+init();

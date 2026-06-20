@@ -38,6 +38,54 @@
             <span><strong>Admin:</strong> admin@quy.local / admin123</span>
             <span><strong>Thành viên:</strong> minh@quy.local / minh123</span>
           </div>
+
+          <details class="auth-extra">
+            <summary>Đăng ký chủ quỹ mới</summary>
+            <form id="ownerSignupForm" class="login-form">
+              <label>
+                Tên chủ quỹ
+                <input id="ownerName" autocomplete="name" placeholder="Ví dụ: Anh Minh" required />
+              </label>
+              <label>
+                Email
+                <input id="ownerEmail" type="email" autocomplete="email" placeholder="you@example.com" required />
+              </label>
+              <label>
+                Mật khẩu
+                <input id="ownerPassword" type="password" autocomplete="new-password" minlength="6" required />
+              </label>
+              <label>
+                Tên quỹ
+                <input id="ownerFundName" placeholder="Ví dụ: Quỹ ăn chơi lớp A" required />
+              </label>
+              <button type="submit">Tạo tài khoản chủ quỹ</button>
+              <p id="ownerSignupMessage" class="hint"></p>
+            </form>
+          </details>
+
+          <details class="auth-extra">
+            <summary>Tham gia bằng mã mời</summary>
+            <form id="inviteSignupForm" class="login-form">
+              <label>
+                Mã mời
+                <input id="inviteCode" autocomplete="off" placeholder="Dán mã hoặc link mời" required />
+              </label>
+              <label>
+                Tên của bạn
+                <input id="inviteName" autocomplete="name" placeholder="Ví dụ: Minh" required />
+              </label>
+              <label>
+                Email
+                <input id="inviteEmail" type="email" autocomplete="email" placeholder="you@example.com" required />
+              </label>
+              <label>
+                Mật khẩu
+                <input id="invitePassword" type="password" autocomplete="new-password" minlength="6" required />
+              </label>
+              <button type="submit">Đăng ký tham gia quỹ</button>
+              <p id="inviteSignupMessage" class="hint"></p>
+            </form>
+          </details>
         </div>
       </section>
 
@@ -106,13 +154,22 @@
               <input id="memberName" autocomplete="off" placeholder="Ví dụ: Minh" required />
             </label>
             <label>
+              Email mời
+              <input id="memberEmail" type="email" autocomplete="off" placeholder="minh@example.com" />
+            </label>
+            <label>
               Ngân hàng/ví nạp
               <input id="memberWallet" autocomplete="off" placeholder="MoMo, MB, Techcombank..." />
             </label>
-            <button type="submit">Thêm thành viên</button>
+            <button type="submit">Tạo link mời</button>
           </form>
 
           <div id="memberList" class="member-list"></div>
+
+          <div class="pending-section admin-only">
+            <h3>Link mời thành viên</h3>
+            <div id="inviteList" class="ledger"></div>
+          </div>
         </section>
 
         <section id="deposit" class="tab-panel">

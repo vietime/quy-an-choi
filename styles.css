@@ -133,6 +133,18 @@ label {
   font-size: 13px;
 }
 
+.auth-extra {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.auth-extra summary {
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 850;
+}
+
 .header-actions {
   display: flex;
   align-items: center;

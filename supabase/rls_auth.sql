@@ -13,6 +13,25 @@ create index if not exists profiles_member_id_idx on public.profiles(member_id);
 
 alter table public.profiles enable row level security;
 
+create table if not exists public.fund_invites (
+  id text primary key,
+  fund_id text not null references public.funds(id) on delete cascade,
+  invite_code text not null unique,
+  member_id text references public.fund_members(id) on delete cascade,
+  email text,
+  status text not null default 'pending' check (status in ('pending', 'used', 'revoked')),
+  created_by text,
+  expires_at timestamptz,
+  used_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  used_at timestamptz
+);
+
+create index if not exists fund_invites_fund_id_created_at_idx on public.fund_invites(fund_id, created_at desc);
+create index if not exists fund_invites_code_idx on public.fund_invites(invite_code);
+
+alter table public.fund_invites enable row level security;
+
 create or replace function public.current_profile_member_id(target_fund_id text)
 returns text
 language sql
@@ -82,6 +101,9 @@ drop policy if exists "deposit_requests_member_insert" on public.deposit_request
 drop policy if exists "deposit_requests_admin_update" on public.deposit_requests;
 drop policy if exists "notifications_select_admin_or_self" on public.notifications;
 drop policy if exists "notifications_admin_insert" on public.notifications;
+drop policy if exists "fund_invites_select_admin" on public.fund_invites;
+drop policy if exists "fund_invites_admin_insert" on public.fund_invites;
+drop policy if exists "fund_invites_admin_update" on public.fund_invites;
 drop policy if exists "events_select_admin_or_participant" on public.events;
 drop policy if exists "events_admin_write" on public.events;
 drop policy if exists "participants_select_admin_or_self" on public.event_participants;
@@ -165,6 +187,22 @@ using (
 create policy "notifications_admin_insert"
 on public.notifications
 for insert
+with check (public.is_fund_admin(fund_id));
+
+create policy "fund_invites_select_admin"
+on public.fund_invites
+for select
+using (public.is_fund_admin(fund_id));
+
+create policy "fund_invites_admin_insert"
+on public.fund_invites
+for insert
+with check (public.is_fund_admin(fund_id));
+
+create policy "fund_invites_admin_update"
+on public.fund_invites
+for update
+using (public.is_fund_admin(fund_id))
 with check (public.is_fund_admin(fund_id));
 
 create policy "events_select_admin_or_participant"

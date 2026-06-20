@@ -8,7 +8,7 @@ const currency = new Intl.NumberFormat("vi-VN", {
 });
 
 const CONFIG = window.APP_CONFIG || {};
-const FUND_ID = CONFIG.fundId || "quy-an-choi-demo";
+const DEFAULT_FUND_ID = CONFIG.fundId || "quy-an-choi-demo";
 
 const els = {
   loginScreen: document.querySelector("#loginScreen"),
@@ -17,6 +17,18 @@ const els = {
   loginAccount: document.querySelector("#loginAccount"),
   loginPassword: document.querySelector("#loginPassword"),
   loginMessage: document.querySelector("#loginMessage"),
+  ownerSignupForm: document.querySelector("#ownerSignupForm"),
+  ownerName: document.querySelector("#ownerName"),
+  ownerEmail: document.querySelector("#ownerEmail"),
+  ownerPassword: document.querySelector("#ownerPassword"),
+  ownerFundName: document.querySelector("#ownerFundName"),
+  ownerSignupMessage: document.querySelector("#ownerSignupMessage"),
+  inviteSignupForm: document.querySelector("#inviteSignupForm"),
+  inviteCode: document.querySelector("#inviteCode"),
+  inviteName: document.querySelector("#inviteName"),
+  inviteEmail: document.querySelector("#inviteEmail"),
+  invitePassword: document.querySelector("#invitePassword"),
+  inviteSignupMessage: document.querySelector("#inviteSignupMessage"),
   currentUserName: document.querySelector("#currentUserName"),
   currentRole: document.querySelector("#currentRole"),
   dbStatus: document.querySelector("#dbStatus"),
@@ -27,8 +39,10 @@ const els = {
   pendingCount: document.querySelector("#pendingCount"),
   memberForm: document.querySelector("#memberForm"),
   memberName: document.querySelector("#memberName"),
+  memberEmail: document.querySelector("#memberEmail"),
   memberWallet: document.querySelector("#memberWallet"),
   memberList: document.querySelector("#memberList"),
+  inviteList: document.querySelector("#inviteList"),
   depositForm: document.querySelector("#depositForm"),
   depositMember: document.querySelector("#depositMember"),
   depositAmount: document.querySelector("#depositAmount"),
@@ -62,6 +76,10 @@ let cloudStatus = cloudClient ? "Đang chờ đồng bộ" : "Local demo";
 let state = loadState();
 let session = loadSession();
 
+function activeFundId() {
+  return session?.fundId || DEFAULT_FUND_ID;
+}
+
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
@@ -90,6 +108,7 @@ function loadState() {
     eventParticipants: [],
     depositRequests: [],
     notifications: [],
+    invites: [],
   };
 }
 
@@ -121,8 +140,9 @@ async function loadCloudProfile(user) {
   const { data, error } = await cloudClient
     .from("profiles")
     .select("*")
-    .eq("fund_id", FUND_ID)
     .eq("user_id", user.id)
+    .order("created_at", { ascending: true })
+    .limit(1)
     .single();
 
   if (error) throw error;
@@ -131,6 +151,7 @@ async function loadCloudProfile(user) {
     name: data.display_name,
     email: data.email || user.email,
     memberId: data.member_id,
+    fundId: data.fund_id,
     userId: user.id,
     cloud: true,
   };
@@ -152,6 +173,76 @@ function createCloudClient() {
   return window.supabase.createClient(url, anonKey);
 }
 
+function extractInviteCode(value) {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    return parsed.searchParams.get("invite") || raw;
+  } catch {
+    return raw;
+  }
+}
+
+async function signUpAndGetUser(email, password, displayName) {
+  const signUpResult = await cloudClient.auth.signUp({
+    email,
+    password,
+    options: { data: { display_name: displayName } },
+  });
+  if (signUpResult.error) throw signUpResult.error;
+
+  let user = signUpResult.data.user;
+  let authSession = signUpResult.data.session;
+  if (!authSession) {
+    const signInResult = await cloudClient.auth.signInWithPassword({ email, password });
+    if (signInResult.error) throw signInResult.error;
+    user = signInResult.data.user;
+    authSession = signInResult.data.session;
+  }
+
+  if (!user || !authSession) {
+    throw new Error("Tài khoản đã tạo nhưng cần xác nhận email trước khi tiếp tục.");
+  }
+  return user;
+}
+
+async function registerOwnerAccount() {
+  if (!cloudClient) throw new Error("Chưa cấu hình Supabase.");
+  const name = els.ownerName.value.trim();
+  const email = els.ownerEmail.value.trim();
+  const password = els.ownerPassword.value;
+  const fundName = els.ownerFundName.value.trim();
+  if (!name || !email || !password || !fundName) throw new Error("Vui lòng nhập đủ thông tin.");
+
+  const user = await signUpAndGetUser(email, password, name);
+  const { error } = await cloudClient.rpc("create_fund_for_current_user", {
+    fund_name: fundName,
+    display_name: name,
+  });
+  if (error) throw error;
+  await loadCloudProfile(user);
+  await loadCloudState();
+}
+
+async function registerWithInvite() {
+  if (!cloudClient) throw new Error("Chưa cấu hình Supabase.");
+  const code = extractInviteCode(els.inviteCode.value);
+  const name = els.inviteName.value.trim();
+  const email = els.inviteEmail.value.trim();
+  const password = els.invitePassword.value;
+  if (!code || !name || !email || !password) throw new Error("Vui lòng nhập đủ thông tin.");
+
+  const user = await signUpAndGetUser(email, password, name);
+  const { error } = await cloudClient.rpc("accept_fund_invite", {
+    invite_code_input: code,
+    display_name: name,
+  });
+  if (error) throw error;
+  await loadCloudProfile(user);
+  await loadCloudState();
+}
+
 async function loadCloudState() {
   if (!cloudClient) {
     cloudStatus = "Local demo";
@@ -165,7 +256,7 @@ async function loadCloudState() {
     const membersResult = await cloudClient
       .from("fund_members")
       .select("*")
-      .eq("fund_id", FUND_ID)
+      .eq("fund_id", activeFundId())
       .order("created_at", { ascending: true });
 
     if (membersResult.error) throw membersResult.error;
@@ -180,7 +271,7 @@ async function loadCloudState() {
     const ledgerResult = await cloudClient
       .from("ledger_entries")
       .select("*")
-      .eq("fund_id", FUND_ID)
+      .eq("fund_id", activeFundId())
       .order("created_at", { ascending: true });
 
     if (ledgerResult.error) throw ledgerResult.error;
@@ -188,7 +279,7 @@ async function loadCloudState() {
     const requestResult = await cloudClient
       .from("deposit_requests")
       .select("*, fund_members(name)")
-      .eq("fund_id", FUND_ID)
+      .eq("fund_id", activeFundId())
       .order("created_at", { ascending: true });
 
     if (requestResult.error) throw requestResult.error;
@@ -196,15 +287,26 @@ async function loadCloudState() {
     const notificationResult = await cloudClient
       .from("notifications")
       .select("*")
-      .eq("fund_id", FUND_ID)
+      .eq("fund_id", activeFundId())
       .order("created_at", { ascending: true });
 
     if (notificationResult.error) throw notificationResult.error;
 
+    let inviteRows = [];
+    if (isAdmin()) {
+      const inviteResult = await cloudClient
+        .from("fund_invites")
+        .select("*, fund_members(name)")
+        .eq("fund_id", activeFundId())
+        .order("created_at", { ascending: false });
+      if (inviteResult.error) throw inviteResult.error;
+      inviteRows = inviteResult.data || [];
+    }
+
     const eventsResult = await cloudClient
       .from("events")
       .select("*")
-      .eq("fund_id", FUND_ID)
+      .eq("fund_id", activeFundId())
       .order("created_at", { ascending: true });
 
     if (eventsResult.error) throw eventsResult.error;
@@ -228,13 +330,10 @@ async function loadCloudState() {
       ledger: ledgerResult.data.map(ledgerFromRow),
       depositRequests: requestResult.data.map(depositRequestFromRow),
       notifications: notificationResult.data.map(notificationFromRow),
+      invites: inviteRows.map(inviteFromRow),
       events: eventsResult.data.map(eventFromRow),
       eventParticipants: eventParticipants.map(eventParticipantFromRow),
     };
-    if (session?.role === "member" && state.members[0]) {
-      session.memberId = state.members[0].id;
-      session.name = state.members[0].name;
-    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     cloudLoaded = true;
     cloudStatus = "Supabase/PostgreSQL";
@@ -261,13 +360,6 @@ function queueCloudSave() {
 
 async function saveCloudStateNow() {
   if (!cloudClient) return;
-
-  const fundResult = await cloudClient.from("funds").upsert({
-    id: FUND_ID,
-    name: "Quỹ Ăn Chơi",
-    updated_at: new Date().toISOString(),
-  });
-  if (fundResult.error) throw fundResult.error;
 
   if (state.members.length) {
     const { error } = await cloudClient.from("fund_members").upsert(state.members.map(memberToRow));
@@ -312,7 +404,7 @@ async function saveCloudStateNow() {
 function memberToRow(member) {
   return {
     id: member.id,
-    fund_id: FUND_ID,
+    fund_id: activeFundId(),
     name: member.name,
     wallet: member.wallet || null,
     code: member.code,
@@ -333,7 +425,7 @@ function memberFromRow(row) {
 function ledgerToRow(entry) {
   return {
     id: entry.id,
-    fund_id: FUND_ID,
+    fund_id: activeFundId(),
     member_id: entry.memberId || null,
     type: entry.type,
     amount: entry.amount,
@@ -360,7 +452,7 @@ function ledgerFromRow(row) {
 function depositRequestToRow(request) {
   return {
     id: request.id,
-    fund_id: FUND_ID,
+    fund_id: activeFundId(),
     member_id: request.memberId,
     amount: request.amount,
     note: request.note || null,
@@ -390,7 +482,7 @@ function depositRequestFromRow(row) {
 function notificationToRow(notification) {
   return {
     id: notification.id,
-    fund_id: FUND_ID,
+    fund_id: activeFundId(),
     member_id: notification.memberId || null,
     title: notification.title,
     body: notification.body,
@@ -412,10 +504,42 @@ function notificationFromRow(row) {
   };
 }
 
+function inviteToRow(invite) {
+  return {
+    id: invite.id,
+    fund_id: activeFundId(),
+    invite_code: invite.code,
+    member_id: invite.memberId || null,
+    email: invite.email || null,
+    status: invite.status || "pending",
+    created_by: invite.createdBy || session?.email || null,
+    expires_at: invite.expiresAt ? new Date(invite.expiresAt).toISOString() : null,
+    used_by: invite.usedBy || null,
+    created_at: new Date(invite.createdAt || Date.now()).toISOString(),
+    used_at: invite.usedAt ? new Date(invite.usedAt).toISOString() : null,
+  };
+}
+
+function inviteFromRow(row) {
+  return {
+    id: row.id,
+    code: row.invite_code,
+    memberId: row.member_id || "",
+    memberName: row.fund_members?.name || "",
+    email: row.email || "",
+    status: row.status || "pending",
+    createdBy: row.created_by || "",
+    expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : null,
+    usedBy: row.used_by || "",
+    createdAt: new Date(row.created_at).getTime(),
+    usedAt: row.used_at ? new Date(row.used_at).getTime() : null,
+  };
+}
+
 function eventToRow(item) {
   return {
     id: item.id,
-    fund_id: FUND_ID,
+    fund_id: activeFundId(),
     name: item.name,
     total_amount: item.totalAmount,
     guest_amount: item.guestAmount || 0,
@@ -478,6 +602,18 @@ function demoAccounts() {
 
 function makeId(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}_${Date.now().toString(36)}`;
+}
+
+function makeInviteCode() {
+  return `QAC-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
+}
+
+function inviteLink(code) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("invite", code);
+  return url.toString();
 }
 
 function normalizeCode(value) {
@@ -572,6 +708,7 @@ function render() {
   renderStats();
   renderMemberOptions();
   renderMembers();
+  renderInvites();
   renderParticipants();
   renderQrBoard();
   renderDepositRequests();
@@ -651,6 +788,45 @@ function renderMembers() {
             <span>Đã dùng <strong>${money(totals.spent)}</strong></span>
           </div>
           <div class="muted">${escapeHtml(member.wallet || "Chưa khai báo ví/ngân hàng")}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderInvites() {
+  if (!els.inviteList) return;
+  if (!isAdmin()) {
+    els.inviteList.innerHTML = "";
+    return;
+  }
+  const invites = state.invites || [];
+  if (!invites.length) {
+    els.inviteList.innerHTML = `<div class="empty">Chưa có link mời nào.</div>`;
+    return;
+  }
+
+  els.inviteList.innerHTML = invites
+    .map((invite) => {
+      const statusText = invite.status === "used" ? "Đã dùng" : invite.status === "revoked" ? "Đã hủy" : "Đang chờ";
+      const link = inviteLink(invite.code);
+      const actions =
+        invite.status === "pending"
+          ? `
+            <div class="pending-actions">
+              <button type="button" data-copy-invite="${escapeHtml(link)}">Copy link</button>
+              <button class="ghost danger" type="button" data-revoke-invite="${invite.id}">Hủy</button>
+            </div>
+          `
+          : "";
+      return `
+        <article class="ledger-row">
+          <div>
+            <strong>${escapeHtml(invite.memberName || invite.email || invite.code)}</strong>
+            <div class="ledger-meta">${statusText} - ${escapeHtml(invite.code)}</div>
+            <div class="muted">${escapeHtml(link)}</div>
+          </div>
+          ${actions}
         </article>
       `;
     })
@@ -974,6 +1150,52 @@ function addDeposit(memberId, amount, note) {
   state.ledger.push(makeLedger("deposit", memberId, amount, note));
 }
 
+async function createMemberInvite(name, email, wallet) {
+  if (!requireAdmin()) return null;
+  const member = makeMember(name, wallet);
+  const invite = {
+    id: makeId("invite"),
+    code: makeInviteCode(),
+    memberId: member.id,
+    memberName: member.name,
+    email: email || "",
+    status: "pending",
+    createdBy: session.email,
+    expiresAt: Date.now() + 14 * 24 * 60 * 60 * 1000,
+    usedBy: "",
+    usedAt: null,
+    createdAt: Date.now(),
+  };
+
+  state.members.push(member);
+  state.invites = state.invites || [];
+  state.invites.unshift(invite);
+
+  if (cloudClient && session?.cloud) {
+    const { error: memberError } = await cloudClient.from("fund_members").insert(memberToRow(member));
+    if (memberError) throw memberError;
+    const { error: inviteError } = await cloudClient.from("fund_invites").insert(inviteToRow(invite));
+    if (inviteError) throw inviteError;
+  } else {
+    saveState();
+  }
+  return invite;
+}
+
+async function revokeInvite(inviteId) {
+  if (!requireAdmin()) return;
+  const invite = (state.invites || []).find((item) => item.id === inviteId);
+  if (!invite || invite.status !== "pending") return;
+  invite.status = "revoked";
+  if (cloudClient && session?.cloud) {
+    const { error } = await cloudClient.from("fund_invites").update({ status: "revoked" }).eq("id", invite.id);
+    if (error) throw error;
+  } else {
+    saveState();
+  }
+  render();
+}
+
 function makeNotification(memberId, title, body, type = "event") {
   return {
     id: makeId("notification"),
@@ -1235,6 +1457,11 @@ function escapeHtml(value) {
 }
 
 function bindEvents() {
+  const initialInvite = new URLSearchParams(window.location.search).get("invite");
+  if (initialInvite && els.inviteCode) {
+    els.inviteCode.value = initialInvite;
+  }
+
   els.loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const account = demoAccounts()[els.loginAccount.value];
@@ -1273,6 +1500,36 @@ function bindEvents() {
     }
   });
 
+  els.ownerSignupForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      els.ownerSignupMessage.textContent = "Đang tạo tài khoản chủ quỹ...";
+      await registerOwnerAccount();
+      els.ownerSignupForm.reset();
+      els.ownerSignupMessage.textContent = "";
+      activateTab("members");
+      render();
+    } catch (error) {
+      console.error(error);
+      els.ownerSignupMessage.textContent = error.message || "Không tạo được tài khoản chủ quỹ.";
+    }
+  });
+
+  els.inviteSignupForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      els.inviteSignupMessage.textContent = "Đang đăng ký tham gia quỹ...";
+      await registerWithInvite();
+      els.inviteSignupForm.reset();
+      els.inviteSignupMessage.textContent = "";
+      activateTab("members");
+      render();
+    } catch (error) {
+      console.error(error);
+      els.inviteSignupMessage.textContent = error.message || "Không đăng ký được bằng mã mời.";
+    }
+  });
+
   els.logoutButton.addEventListener("click", async () => {
     if (cloudClient) {
       await cloudClient.auth.signOut();
@@ -1288,14 +1545,41 @@ function bindEvents() {
     });
   });
 
-  els.memberForm.addEventListener("submit", (event) => {
+  els.memberForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!requireAdmin()) return;
     const name = els.memberName.value.trim();
     if (!name) return;
-    state.members.push(makeMember(name, els.memberWallet.value));
-    els.memberForm.reset();
-    render();
+    try {
+      const invite = await createMemberInvite(name, els.memberEmail.value.trim(), els.memberWallet.value);
+      els.memberForm.reset();
+      render();
+      if (invite) {
+        await navigator.clipboard?.writeText(inviteLink(invite.code));
+        alert("Đã tạo link mời và copy vào clipboard.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Không tạo được link mời.");
+    }
+  });
+
+  els.inviteList?.addEventListener("click", async (event) => {
+    const link = event.target.dataset.copyInvite;
+    const revokeId = event.target.dataset.revokeInvite;
+    try {
+      if (link) {
+        await navigator.clipboard.writeText(link);
+        event.target.textContent = "Đã copy";
+        setTimeout(() => {
+          event.target.textContent = "Copy link";
+        }, 1000);
+      }
+      if (revokeId) await revokeInvite(revokeId);
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Không xử lý được link mời.");
+    }
   });
 
   els.memberList.addEventListener("click", (event) => {

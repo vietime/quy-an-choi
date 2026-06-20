@@ -31,7 +31,6 @@ const els = {
   inviteSignupMessage: document.querySelector("#inviteSignupMessage"),
   currentUserName: document.querySelector("#currentUserName"),
   currentRole: document.querySelector("#currentRole"),
-  dbStatus: document.querySelector("#dbStatus"),
   logoutButton: document.querySelector("#logoutButton"),
   totalFund: document.querySelector("#totalFund"),
   totalSpent: document.querySelector("#totalSpent"),
@@ -78,7 +77,7 @@ const els = {
 let cloudClient = createCloudClient();
 let cloudLoaded = false;
 let cloudSaveTimer = null;
-let cloudStatus = cloudClient ? "Đang chờ đồng bộ" : "Local demo";
+let cloudStatus = cloudClient ? "Đang chờ đồng bộ" : "Chưa cấu hình máy chủ";
 let state = loadState();
 let session = loadSession();
 
@@ -295,13 +294,12 @@ async function registerWithInvite() {
 
 async function loadCloudState() {
   if (!cloudClient) {
-    cloudStatus = "Local demo";
+    cloudStatus = "Chưa cấu hình máy chủ";
     return false;
   }
 
   try {
     cloudStatus = "Đang kết nối";
-    renderDbStatus();
 
     const fundResult = await cloudClient.from("funds").select("*").eq("id", activeFundId()).single();
     if (fundResult.error) throw fundResult.error;
@@ -408,7 +406,7 @@ async function loadCloudState() {
   } catch (error) {
     console.error("Không kết nối được Supabase", error);
     cloudLoaded = false;
-    cloudStatus = "Local demo (lỗi Supabase)";
+    cloudStatus = "Mất kết nối máy chủ";
     return false;
   }
 }
@@ -419,8 +417,7 @@ function queueCloudSave() {
   cloudSaveTimer = setTimeout(() => {
     saveCloudStateNow().catch((error) => {
       console.error("Không lưu được Supabase", error);
-      cloudStatus = "Local demo (lỗi lưu)";
-      renderDbStatus();
+      cloudStatus = "Không lưu được dữ liệu";
     });
   }, 350);
 }
@@ -470,7 +467,6 @@ async function saveCloudStateNow() {
   }
 
   cloudStatus = "Supabase/PostgreSQL";
-  renderDbStatus();
 }
 
 async function deleteLegacyDemoSeedFromCloud() {
@@ -798,7 +794,6 @@ function render() {
   saveState();
   saveSession();
   renderAuth();
-  renderDbStatus();
   if (!session) return;
   renderStats();
   renderMemberOptions();
@@ -821,12 +816,6 @@ function renderFundBankForm() {
   els.fundBankAccount.value = fund.bankAccountNumber || "";
   els.fundBankName.value = fund.bankAccountName || "";
   els.fundTransferTemplate.value = fund.transferTemplate || "QAC-{MA_THANH_VIEN}";
-}
-
-function renderDbStatus() {
-  if (els.dbStatus) {
-    els.dbStatus.textContent = cloudStatus;
-  }
 }
 
 function renderAuth() {

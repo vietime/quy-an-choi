@@ -67,7 +67,7 @@ window.APP_CONFIG = {
 };
 ```
 
-Sau khi deploy lại GitHub Pages, trạng thái `CSDL` trên giao diện sẽ chuyển từ `Local demo` sang `Supabase/PostgreSQL`.
+Sau khi deploy lại GitHub Pages, app sẽ đăng nhập và đồng bộ dữ liệu qua Supabase/PostgreSQL. Trạng thái CSDL là thông tin kỹ thuật nội bộ, không hiển thị trên giao diện người dùng.
 
 Hiện bản online đã dùng Supabase Auth + RLS:
 

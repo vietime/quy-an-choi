@@ -41,6 +41,7 @@ const els = {
   memberName: document.querySelector("#memberName"),
   memberEmail: document.querySelector("#memberEmail"),
   memberWallet: document.querySelector("#memberWallet"),
+  memberInviteMessage: document.querySelector("#memberInviteMessage"),
   memberList: document.querySelector("#memberList"),
   inviteList: document.querySelector("#inviteList"),
   depositForm: document.querySelector("#depositForm"),
@@ -642,6 +643,17 @@ function inviteLink(code) {
   url.hash = "";
   url.searchParams.set("invite", code);
   return url.toString();
+}
+
+async function copyTextToClipboard(text) {
+  if (!navigator.clipboard?.writeText) return false;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (error) {
+    console.warn("Trình duyệt không cho phép copy tự động", error);
+    return false;
+  }
 }
 
 function normalizeCode(value) {
@@ -1567,16 +1579,20 @@ function bindEvents() {
     const name = els.memberName.value.trim();
     if (!name) return;
     try {
+      els.memberInviteMessage.textContent = "Đang tạo link mời...";
       const invite = await createMemberInvite(name, els.memberEmail.value.trim(), els.memberWallet.value);
       els.memberForm.reset();
       render();
       if (invite) {
-        await navigator.clipboard?.writeText(inviteLink(invite.code));
-        alert("Đã tạo link mời và copy vào clipboard.");
+        const link = inviteLink(invite.code);
+        const copied = await copyTextToClipboard(link);
+        els.memberInviteMessage.textContent = copied
+          ? "Đã tạo link mời và copy link."
+          : "Đã tạo link mời. Trình duyệt không cho copy tự động, hãy bấm Copy link hoặc bấm giữ vào link bên dưới để sao chép.";
       }
     } catch (error) {
       console.error(error);
-      alert(error.message || "Không tạo được link mời.");
+      els.memberInviteMessage.textContent = error.message || "Không tạo được link mời.";
     }
   });
 
@@ -1585,8 +1601,11 @@ function bindEvents() {
     const revokeId = event.target.dataset.revokeInvite;
     try {
       if (link) {
-        await navigator.clipboard.writeText(link);
-        event.target.textContent = "Đã copy";
+        const copied = await copyTextToClipboard(link);
+        event.target.textContent = copied ? "Đã copy" : "Không copy được";
+        if (!copied && els.memberInviteMessage) {
+          els.memberInviteMessage.textContent = "Trình duyệt đang chặn copy tự động. Hãy bấm giữ vào link mời rồi chọn Sao chép.";
+        }
         setTimeout(() => {
           event.target.textContent = "Copy link";
         }, 1000);
@@ -1594,7 +1613,9 @@ function bindEvents() {
       if (revokeId) await revokeInvite(revokeId);
     } catch (error) {
       console.error(error);
-      alert(error.message || "Không xử lý được link mời.");
+      if (els.memberInviteMessage) {
+        els.memberInviteMessage.textContent = error.message || "Không xử lý được link mời.";
+      }
     }
   });
 
@@ -1679,15 +1700,12 @@ function bindEvents() {
   els.qrBoard.addEventListener("click", async (event) => {
     const code = event.target.dataset.copyCode;
     if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      event.target.textContent = "Đã sao chép";
-      setTimeout(() => {
-        event.target.textContent = "Sao chép mã";
-      }, 1000);
-    } catch {
-      alert(code);
-    }
+    const copied = await copyTextToClipboard(code);
+    event.target.textContent = copied ? "Đã sao chép" : "Không copy được";
+    if (!copied) alert(`Không copy tự động được. Mã nạp là: ${code}`);
+    setTimeout(() => {
+      event.target.textContent = "Sao chép mã";
+    }, 1000);
   });
 
   ["input", "change"].forEach((eventName) => {

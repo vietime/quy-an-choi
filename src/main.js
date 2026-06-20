@@ -39,7 +39,6 @@ const els = {
   memberForm: document.querySelector("#memberForm"),
   memberName: document.querySelector("#memberName"),
   memberEmail: document.querySelector("#memberEmail"),
-  memberWallet: document.querySelector("#memberWallet"),
   memberInviteMessage: document.querySelector("#memberInviteMessage"),
   memberList: document.querySelector("#memberList"),
   inviteList: document.querySelector("#inviteList"),
@@ -716,13 +715,13 @@ function normalizeCode(value) {
     .slice(0, 12);
 }
 
-function makeMember(name, wallet) {
+function makeMember(name) {
   const base = normalizeCode(name) || "TV";
   const suffix = String(Math.floor(10 + Math.random() * 89));
   return {
     id: makeId("member"),
     name: name.trim(),
-    wallet: (wallet || "").trim(),
+    wallet: "",
     code: `QAC${base}${suffix}`,
     createdAt: Date.now(),
   };
@@ -881,7 +880,6 @@ function renderMembers() {
             <span>Đã nộp <strong>${money(totals.deposited)}</strong></span>
             <span>Đã dùng <strong>${money(totals.spent)}</strong></span>
           </div>
-          <div class="muted">${escapeHtml(member.wallet || "Chưa khai báo ví/ngân hàng")}</div>
         </article>
       `;
     })
@@ -1280,9 +1278,9 @@ function addDeposit(memberId, amount, note) {
   state.ledger.push(makeLedger("deposit", memberId, amount, note));
 }
 
-async function createMemberInvite(name, email, wallet) {
+async function createMemberInvite(name, email) {
   if (!requireAdmin()) return null;
-  const member = makeMember(name, wallet);
+  const member = makeMember(name);
   const invite = {
     id: makeId("invite"),
     code: makeInviteCode(),
@@ -1670,7 +1668,7 @@ function bindEvents() {
     if (!name) return;
     try {
       els.memberInviteMessage.textContent = "Đang tạo link mời...";
-      const invite = await createMemberInvite(name, els.memberEmail.value.trim(), els.memberWallet.value);
+      const invite = await createMemberInvite(name, els.memberEmail.value.trim());
       els.memberForm.reset();
       render();
       if (invite) {

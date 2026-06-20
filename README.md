@@ -36,6 +36,12 @@ http://localhost:5173
 
 Dữ liệu demo lưu trong `localStorage` của trình duyệt. Đăng nhập admin rồi bấm `Làm mới demo` để reset.
 
+## CSDL hiện tại
+
+Prototype này đang dùng `localStorage` của trình duyệt làm nơi lưu dữ liệu tạm, gồm danh sách thành viên, sổ quỹ và phiên đăng nhập demo. Vì vậy dữ liệu chỉ nằm trên máy/trình duyệt đang mở app, chưa đồng bộ giữa nhiều người và chưa có bảo mật backend.
+
+Khi làm bản thật nên chuyển sang PostgreSQL, MySQL hoặc Supabase/Firebase. Các thao tác cộng tiền, trừ tiền, phân quyền và đối soát ngân hàng phải xử lý ở backend.
+
 ## Nguyên tắc tính tiền
 
 Số dư từng thành viên:

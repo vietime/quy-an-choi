@@ -66,7 +66,6 @@ const els = {
   eventHistory: document.querySelector("#eventHistory"),
   ledger: document.querySelector("#ledger"),
   notificationList: document.querySelector("#notificationList"),
-  resetDemo: document.querySelector("#resetDemo"),
 };
 
 let cloudClient = createCloudClient();
@@ -80,36 +79,49 @@ function activeFundId() {
   return session?.fundId || DEFAULT_FUND_ID;
 }
 
-function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw) {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }
-
-  const now = Date.now();
-  const members = [
-    makeMember("Minh", "MB Bank"),
-    makeMember("Hiếu", "MoMo"),
-    makeMember("Trang", "Techcombank"),
-  ];
-
+function emptyState() {
   return {
-    members,
-    ledger: [
-      makeLedger("deposit", members[0].id, 500000, "Nộp quỹ ban đầu", now - 900000),
-      makeLedger("deposit", members[1].id, 400000, "Nộp quỹ ban đầu", now - 800000),
-      makeLedger("deposit", members[2].id, 300000, "Nộp quỹ ban đầu", now - 700000),
-    ],
+    members: [],
+    ledger: [],
     events: [],
     eventParticipants: [],
     depositRequests: [],
     notifications: [],
     invites: [],
   };
+}
+
+function isLegacyDemoSeedState(value) {
+  const members = value.members || [];
+  const ledger = value.ledger || [];
+  const memberNames = members.map((member) => member.name).sort().join("|");
+  const amounts = ledger.map((entry) => entry.amount).sort((a, b) => a - b).join("|");
+  return (
+    members.length === 3 &&
+    ledger.length === 3 &&
+    !(value.events || []).length &&
+    !(value.eventParticipants || []).length &&
+    !(value.depositRequests || []).length &&
+    !(value.notifications || []).length &&
+    !(value.invites || []).length &&
+    memberNames === "Hiếu|Minh|Trang" &&
+    amounts === "300000|400000|500000" &&
+    ledger.every((entry) => entry.type === "deposit" && entry.note === "Nộp quỹ ban đầu")
+  );
+}
+
+function loadState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      return isLegacyDemoSeedState(parsed) ? emptyState() : parsed;
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+
+  return emptyState();
 }
 
 function saveState() {
@@ -276,9 +288,10 @@ async function loadCloudState() {
     if (membersResult.error) throw membersResult.error;
 
     if (!membersResult.data.length) {
+      state = emptyState();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       cloudLoaded = true;
       cloudStatus = "Supabase/PostgreSQL";
-      await saveCloudStateNow();
       return true;
     }
 
@@ -339,7 +352,7 @@ async function loadCloudState() {
       eventParticipants = participantsResult.data || [];
     }
 
-    state = {
+    const loadedState = {
       members: membersResult.data.map(memberFromRow),
       ledger: ledgerResult.data.map(ledgerFromRow),
       depositRequests: requestResult.data.map(depositRequestFromRow),
@@ -348,6 +361,17 @@ async function loadCloudState() {
       events: eventsResult.data.map(eventFromRow),
       eventParticipants: eventParticipants.map(eventParticipantFromRow),
     };
+
+    if (isAdmin() && isLegacyDemoSeedState(loadedState)) {
+      state = emptyState();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      await deleteLegacyDemoSeedFromCloud();
+      cloudLoaded = true;
+      cloudStatus = "Supabase/PostgreSQL";
+      return true;
+    }
+
+    state = loadedState;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     cloudLoaded = true;
     cloudStatus = "Supabase/PostgreSQL";
@@ -413,6 +437,15 @@ async function saveCloudStateNow() {
 
   cloudStatus = "Supabase/PostgreSQL";
   renderDbStatus();
+}
+
+async function deleteLegacyDemoSeedFromCloud() {
+  const fundId = activeFundId();
+  const tables = ["ledger_entries", "deposit_requests", "notifications", "fund_invites", "events", "fund_members"];
+  for (const table of tables) {
+    const { error } = await cloudClient.from(table).delete().eq("fund_id", fundId);
+    if (error) throw error;
+  }
 }
 
 function memberToRow(member) {
@@ -1710,15 +1743,6 @@ function bindEvents() {
     render();
   });
 
-  els.resetDemo.addEventListener("click", () => {
-    if (!requireAdmin()) return;
-    localStorage.removeItem(STORAGE_KEY);
-    state = loadState();
-    if (session?.role === "member") {
-      session.memberId = state.members[0]?.id || null;
-    }
-    render();
-  });
 }
 
 async function init() {

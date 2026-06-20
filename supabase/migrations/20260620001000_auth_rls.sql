@@ -77,6 +77,9 @@ drop policy if exists "fund_members_select_admin_or_self" on public.fund_members
 drop policy if exists "fund_members_admin_write" on public.fund_members;
 drop policy if exists "ledger_select_admin_or_self" on public.ledger_entries;
 drop policy if exists "ledger_admin_write" on public.ledger_entries;
+drop policy if exists "deposit_requests_select_admin_or_self" on public.deposit_requests;
+drop policy if exists "deposit_requests_member_insert" on public.deposit_requests;
+drop policy if exists "deposit_requests_admin_update" on public.deposit_requests;
 drop policy if exists "events_select_admin_or_participant" on public.events;
 drop policy if exists "events_admin_write" on public.events;
 drop policy if exists "participants_select_admin_or_self" on public.event_participants;
@@ -123,6 +126,28 @@ using (public.is_fund_admin(fund_id) or member_id = public.current_profile_membe
 create policy "ledger_admin_write"
 on public.ledger_entries
 for all
+using (public.is_fund_admin(fund_id))
+with check (public.is_fund_admin(fund_id));
+
+create policy "deposit_requests_select_admin_or_self"
+on public.deposit_requests
+for select
+using (public.is_fund_admin(fund_id) or member_id = public.current_profile_member_id(fund_id));
+
+create policy "deposit_requests_member_insert"
+on public.deposit_requests
+for insert
+with check (
+  member_id = public.current_profile_member_id(fund_id)
+  and status = 'pending'
+  and reviewed_by is null
+  and ledger_entry_id is null
+  and reviewed_at is null
+);
+
+create policy "deposit_requests_admin_update"
+on public.deposit_requests
+for update
 using (public.is_fund_admin(fund_id))
 with check (public.is_fund_admin(fund_id));
 

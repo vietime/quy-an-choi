@@ -27,6 +27,19 @@ create table if not exists public.ledger_entries (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.deposit_requests (
+  id text primary key,
+  fund_id text not null references public.funds(id) on delete cascade,
+  member_id text not null references public.fund_members(id) on delete cascade,
+  amount bigint not null check (amount > 0),
+  note text,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  reviewed_by text,
+  ledger_entry_id text references public.ledger_entries(id) on delete set null,
+  created_at timestamptz not null default now(),
+  reviewed_at timestamptz
+);
+
 create table if not exists public.events (
   id text primary key,
   fund_id text not null references public.funds(id) on delete cascade,
@@ -76,6 +89,8 @@ create table if not exists public.profiles (
 create index if not exists fund_members_fund_id_idx on public.fund_members(fund_id);
 create index if not exists ledger_entries_fund_id_created_at_idx on public.ledger_entries(fund_id, created_at desc);
 create index if not exists ledger_entries_member_id_idx on public.ledger_entries(member_id);
+create index if not exists deposit_requests_fund_id_created_at_idx on public.deposit_requests(fund_id, created_at desc);
+create index if not exists deposit_requests_member_id_idx on public.deposit_requests(member_id);
 create index if not exists events_fund_id_created_at_idx on public.events(fund_id, created_at desc);
 create index if not exists profiles_fund_id_idx on public.profiles(fund_id);
 create index if not exists profiles_member_id_idx on public.profiles(member_id);
@@ -83,6 +98,7 @@ create index if not exists profiles_member_id_idx on public.profiles(member_id);
 alter table public.funds enable row level security;
 alter table public.fund_members enable row level security;
 alter table public.ledger_entries enable row level security;
+alter table public.deposit_requests enable row level security;
 alter table public.events enable row level security;
 alter table public.event_participants enable row level security;
 alter table public.profiles enable row level security;

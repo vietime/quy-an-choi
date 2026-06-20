@@ -160,6 +160,25 @@
           </div>
 
           <div id="qrBoard" class="qr-board"></div>
+
+          <form id="depositRequestForm" class="card-form member-only">
+            <h3>Báo đã chuyển khoản</h3>
+            <label>
+              Số tiền đã chuyển
+              <input id="requestAmount" type="number" min="1000" step="1000" placeholder="300000" required />
+            </label>
+            <label>
+              Ghi chú hoặc mã giao dịch
+              <input id="requestNote" placeholder="Ví dụ: chuyển từ MB, lúc 20:15" />
+            </label>
+            <button type="submit">Tôi đã chuyển khoản</button>
+            <p class="hint">Admin sẽ kiểm tra sao kê và xác nhận. Sau khi xác nhận, tiền mới được cộng vào quỹ.</p>
+          </form>
+
+          <div class="pending-section">
+            <h3>Yêu cầu nộp quỹ chờ xác nhận</h3>
+            <div id="depositRequestList" class="ledger"></div>
+          </div>
         </section>
 
         <section id="events" class="tab-panel">

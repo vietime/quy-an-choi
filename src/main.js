@@ -37,6 +37,10 @@ const els = {
   bankContent: document.querySelector("#bankContent"),
   bankAmount: document.querySelector("#bankAmount"),
   qrBoard: document.querySelector("#qrBoard"),
+  depositRequestForm: document.querySelector("#depositRequestForm"),
+  requestAmount: document.querySelector("#requestAmount"),
+  requestNote: document.querySelector("#requestNote"),
+  depositRequestList: document.querySelector("#depositRequestList"),
   eventForm: document.querySelector("#eventForm"),
   eventName: document.querySelector("#eventName"),
   eventAmount: document.querySelector("#eventAmount"),
@@ -82,6 +86,7 @@ function loadState() {
     ],
     events: [],
     eventParticipants: [],
+    depositRequests: [],
   };
 }
 
@@ -177,6 +182,14 @@ async function loadCloudState() {
 
     if (ledgerResult.error) throw ledgerResult.error;
 
+    const requestResult = await cloudClient
+      .from("deposit_requests")
+      .select("*")
+      .eq("fund_id", FUND_ID)
+      .order("created_at", { ascending: true });
+
+    if (requestResult.error) throw requestResult.error;
+
     const eventsResult = await cloudClient
       .from("events")
       .select("*")
@@ -202,6 +215,7 @@ async function loadCloudState() {
     state = {
       members: membersResult.data.map(memberFromRow),
       ledger: ledgerResult.data.map(ledgerFromRow),
+      depositRequests: requestResult.data.map(depositRequestFromRow),
       events: eventsResult.data.map(eventFromRow),
       eventParticipants: eventParticipants.map(eventParticipantFromRow),
     };
@@ -255,6 +269,13 @@ async function saveCloudStateNow() {
 
   if (state.ledger.length) {
     const { error } = await cloudClient.from("ledger_entries").upsert(state.ledger.map(ledgerToRow));
+    if (error) throw error;
+  }
+
+  if ((state.depositRequests || []).length) {
+    const { error } = await cloudClient
+      .from("deposit_requests")
+      .upsert((state.depositRequests || []).map(depositRequestToRow));
     if (error) throw error;
   }
 
@@ -314,6 +335,35 @@ function ledgerFromRow(row) {
     eventId: row.event_id || null,
     eventName: row.event_name || "",
     createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function depositRequestToRow(request) {
+  return {
+    id: request.id,
+    fund_id: FUND_ID,
+    member_id: request.memberId,
+    amount: request.amount,
+    note: request.note || null,
+    status: request.status,
+    reviewed_by: request.reviewedBy || null,
+    ledger_entry_id: request.ledgerEntryId || null,
+    created_at: new Date(request.createdAt || Date.now()).toISOString(),
+    reviewed_at: request.reviewedAt ? new Date(request.reviewedAt).toISOString() : null,
+  };
+}
+
+function depositRequestFromRow(row) {
+  return {
+    id: row.id,
+    memberId: row.member_id,
+    amount: Number(row.amount) || 0,
+    note: row.note || "",
+    status: row.status,
+    reviewedBy: row.reviewed_by || "",
+    ledgerEntryId: row.ledger_entry_id || "",
+    createdAt: new Date(row.created_at).getTime(),
+    reviewedAt: row.reviewed_at ? new Date(row.reviewed_at).getTime() : null,
   };
 }
 
@@ -479,6 +529,7 @@ function render() {
   renderMembers();
   renderParticipants();
   renderQrBoard();
+  renderDepositRequests();
   renderEventPreview();
   renderLedger();
 }
@@ -508,7 +559,9 @@ function renderAuth() {
 
 function renderStats() {
   const totals = allTotals();
-  const pending = state.ledger.filter((entry) => entry.type === "pending").length;
+  const pendingLedger = state.ledger.filter((entry) => entry.type === "pending").length;
+  const pendingRequests = (state.depositRequests || []).filter((request) => request.status === "pending").length;
+  const pending = pendingLedger + pendingRequests;
   els.totalFund.textContent = money(totals.deposited - totals.spent);
   els.totalSpent.textContent = money(totals.spent);
   els.memberCount.textContent = state.members.length;
@@ -599,6 +652,48 @@ function renderQrBoard() {
         </article>
       `,
     )
+    .join("");
+}
+
+function visibleDepositRequests() {
+  const requests = state.depositRequests || [];
+  if (isAdmin()) return requests;
+  return requests.filter((request) => request.memberId === session?.memberId);
+}
+
+function renderDepositRequests() {
+  if (!els.depositRequestList) return;
+  const requests = visibleDepositRequests().sort((a, b) => b.createdAt - a.createdAt);
+  if (!requests.length) {
+    els.depositRequestList.innerHTML = `<div class="empty">Chưa có yêu cầu nộp quỹ nào.</div>`;
+    return;
+  }
+
+  els.depositRequestList.innerHTML = requests
+    .map((request) => {
+      const member = memberById(request.memberId);
+      const statusText =
+        request.status === "approved" ? "Đã xác nhận" : request.status === "rejected" ? "Đã từ chối" : "Chờ xác nhận";
+      const actions =
+        isAdmin() && request.status === "pending"
+          ? `
+            <div class="pending-actions">
+              <button type="button" data-approve-request="${request.id}">Xác nhận</button>
+              <button class="ghost danger" type="button" data-reject-request="${request.id}">Từ chối</button>
+            </div>
+          `
+          : "";
+      return `
+        <article class="ledger-row">
+          <div>
+            <strong>${escapeHtml(member?.name || "Không rõ thành viên")} báo đã chuyển ${money(request.amount)}</strong>
+            <div class="ledger-meta">${statusText} - ${new Date(request.createdAt).toLocaleString("vi-VN")}</div>
+            <div class="muted">${escapeHtml(request.note || "")}</div>
+          </div>
+          ${actions}
+        </article>
+      `;
+    })
     .join("");
 }
 
@@ -735,6 +830,71 @@ function addDeposit(memberId, amount, note) {
   state.ledger.push(makeLedger("deposit", memberId, amount, note));
 }
 
+async function createDepositRequest(amount, note) {
+  const request = {
+    id: makeId("deposit_request"),
+    memberId: session.memberId,
+    amount: Number(amount) || 0,
+    note: note || "",
+    status: "pending",
+    reviewedBy: "",
+    ledgerEntryId: "",
+    createdAt: Date.now(),
+    reviewedAt: null,
+  };
+
+  state.depositRequests = state.depositRequests || [];
+  state.depositRequests.push(request);
+
+  if (cloudClient && session?.cloud) {
+    const { error } = await cloudClient.from("deposit_requests").insert(depositRequestToRow(request));
+    if (error) throw error;
+  } else {
+    saveState();
+  }
+
+  return request;
+}
+
+async function reviewDepositRequest(requestId, status) {
+  if (!requireAdmin()) return;
+  const request = (state.depositRequests || []).find((item) => item.id === requestId);
+  if (!request || request.status !== "pending") return;
+
+  request.status = status;
+  request.reviewedBy = session.email;
+  request.reviewedAt = Date.now();
+
+  if (status === "approved") {
+    const ledger = makeLedger(
+      "deposit",
+      request.memberId,
+      request.amount,
+      `Admin xác nhận yêu cầu nộp quỹ: ${request.note || "không ghi chú"}`,
+    );
+    request.ledgerEntryId = ledger.id;
+    state.ledger.push(ledger);
+  }
+
+  if (cloudClient && session?.cloud) {
+    if (status === "approved") {
+      const ledger = state.ledger.find((entry) => entry.id === request.ledgerEntryId);
+      const { error: ledgerError } = await cloudClient.from("ledger_entries").insert(ledgerToRow(ledger));
+      if (ledgerError) throw ledgerError;
+    }
+
+    const { error: requestError } = await cloudClient
+      .from("deposit_requests")
+      .update(depositRequestToRow(request))
+      .eq("id", request.id);
+    if (requestError) throw requestError;
+  } else {
+    saveState();
+  }
+
+  render();
+}
+
 function activateTab(tabId) {
   document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabId));
   document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
@@ -853,6 +1013,35 @@ function bindEvents() {
     }
     els.bankForm.reset();
     render();
+  });
+
+  els.depositRequestForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!isMember() || !session.memberId) {
+      alert("Chức năng này chỉ dành cho tài khoản thành viên.");
+      return;
+    }
+    try {
+      await createDepositRequest(Number(els.requestAmount.value), els.requestNote.value);
+      els.depositRequestForm.reset();
+      await loadCloudState();
+      render();
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Không tạo được yêu cầu nộp quỹ.");
+    }
+  });
+
+  els.depositRequestList?.addEventListener("click", async (event) => {
+    const approveId = event.target.dataset.approveRequest;
+    const rejectId = event.target.dataset.rejectRequest;
+    try {
+      if (approveId) await reviewDepositRequest(approveId, "approved");
+      if (rejectId) await reviewDepositRequest(rejectId, "rejected");
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Không xử lý được yêu cầu nộp quỹ.");
+    }
   });
 
   els.qrBoard.addEventListener("click", async (event) => {

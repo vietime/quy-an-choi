@@ -5,6 +5,7 @@ Prototype web/PWA cho nhóm bạn quản lý quỹ ăn chơi:
 - Tài khoản demo cho quản trị quỹ và thành viên.
 - Tạo thành viên và mã nạp riêng cho từng người.
 - Ghi nhận khoản nộp quỹ thủ công.
+- Thành viên bấm `Tôi đã chuyển khoản` để tạo yêu cầu nộp quỹ chờ admin xác nhận.
 - Mô phỏng sao kê ngân hàng: hệ thống đọc nội dung chuyển khoản, tìm mã nạp và tự cộng tiền cho thành viên.
 - Tạo buổi ăn/nhậu, chọn thành viên tham gia và tự phân bổ bill.
 - Gán tiền người lạ/khách mời cho một người trong nhóm.
@@ -82,6 +83,18 @@ Khi tạo buổi:
 
 - `Chia đều cho người tham gia sau khi trừ khách lạ`: tổng bill trừ tiền khách lạ, phần còn lại chia đều.
 - `Chia đều bill, người được gán trả phần khách lạ`: bill chia đều cho người tham gia, tiền khách lạ cộng thêm vào người được gán.
+
+## Luồng nộp quỹ giai đoạn 1
+
+Giai đoạn này dùng phương án QR tĩnh + admin xác nhận:
+
+1. Thành viên mở tab `Nạp quỹ`.
+2. Thành viên quét QR/mã nạp cá nhân và chuyển khoản với nội dung có mã nạp.
+3. Thành viên nhập số tiền đã chuyển rồi bấm `Tôi đã chuyển khoản`.
+4. Hệ thống tạo một dòng trong bảng `deposit_requests` trạng thái `pending`.
+5. Admin kiểm tra sao kê ngân hàng.
+6. Admin bấm `Xác nhận`, hệ thống mới tạo dòng `ledger_entries` loại `deposit` và cộng vào số dư thành viên.
+7. Nếu không khớp sao kê, admin bấm `Từ chối`.
 
 ## Đề xuất tính năng cho tài khoản admin
 

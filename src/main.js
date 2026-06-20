@@ -187,7 +187,7 @@ async function loadCloudState() {
 
     const requestResult = await cloudClient
       .from("deposit_requests")
-      .select("*")
+      .select("*, fund_members(name)")
       .eq("fund_id", FUND_ID)
       .order("created_at", { ascending: true });
 
@@ -376,6 +376,7 @@ function depositRequestFromRow(row) {
   return {
     id: row.id,
     memberId: row.member_id,
+    memberName: row.fund_members?.name || "",
     amount: Number(row.amount) || 0,
     note: row.note || "",
     status: row.status,
@@ -715,6 +716,7 @@ function renderDepositRequests() {
   els.depositRequestList.innerHTML = requests
     .map((request) => {
       const member = memberById(request.memberId);
+      const memberName = member?.name || request.memberName || "Không rõ thành viên";
       const statusText =
         request.status === "approved" ? "Đã xác nhận" : request.status === "rejected" ? "Đã từ chối" : "Chờ xác nhận";
       const actions =
@@ -729,7 +731,7 @@ function renderDepositRequests() {
       return `
         <article class="ledger-row">
           <div>
-            <strong>${escapeHtml(member?.name || "Không rõ thành viên")} báo đã chuyển ${money(request.amount)}</strong>
+            <strong>${escapeHtml(memberName)} báo đã chuyển ${money(request.amount)}</strong>
             <div class="ledger-meta">${statusText} - ${new Date(request.createdAt).toLocaleString("vi-VN")}</div>
             <div class="muted">${escapeHtml(request.note || "")}</div>
           </div>

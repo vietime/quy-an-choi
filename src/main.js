@@ -184,19 +184,33 @@ function extractInviteCode(value) {
   }
 }
 
+function friendlyAuthError(error) {
+  const message = error?.message || "";
+  if (/email not confirmed/i.test(message)) {
+    return new Error("Email này đã tạo tài khoản nhưng chưa được xác nhận. Với tài khoản cũ, hãy xóa/tạo lại trong Supabase hoặc xác nhận thủ công trong Auth.");
+  }
+  if (/user already registered|already registered/i.test(message)) {
+    return new Error("Email này đã được đăng ký. Hãy đăng nhập, hoặc dùng email khác để tạo tài khoản mới.");
+  }
+  if (/invalid login credentials/i.test(message)) {
+    return new Error("Email hoặc mật khẩu không đúng.");
+  }
+  return error;
+}
+
 async function signUpAndGetUser(email, password, displayName) {
   const signUpResult = await cloudClient.auth.signUp({
     email,
     password,
     options: { data: { display_name: displayName } },
   });
-  if (signUpResult.error) throw signUpResult.error;
+  if (signUpResult.error) throw friendlyAuthError(signUpResult.error);
 
   let user = signUpResult.data.user;
   let authSession = signUpResult.data.session;
   if (!authSession) {
     const signInResult = await cloudClient.auth.signInWithPassword({ email, password });
-    if (signInResult.error) throw signInResult.error;
+    if (signInResult.error) throw friendlyAuthError(signInResult.error);
     user = signInResult.data.user;
     authSession = signInResult.data.session;
   }
@@ -1496,7 +1510,8 @@ function bindEvents() {
       render();
     } catch (error) {
       console.error(error);
-      els.loginMessage.textContent = error.message || "Không đăng nhập được.";
+      const friendlyError = friendlyAuthError(error);
+      els.loginMessage.textContent = friendlyError.message || "Không đăng nhập được.";
     }
   });
 

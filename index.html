@@ -3,51 +3,172 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#101820" />
-    <title>Hứng Điểm Bằng Tay</title>
+    <meta name="theme-color" content="#0f172a" />
+    <title>Quy An Choi</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="app">
-      <section class="game-shell" aria-label="Hứng điểm bằng tay">
-        <video id="camera" playsinline muted autoplay></video>
-        <canvas id="game" aria-label="Game canvas"></canvas>
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Prototype quan ly nhom</p>
+          <h1>Quy An Choi</h1>
+          <p class="intro">
+            Tao quy, ghi nhan thanh vien nop tien, lap buoi an nhau va phan bo chi phi tu dong.
+          </p>
+        </div>
+        <button id="resetDemo" class="ghost danger" type="button">Lam moi demo</button>
+      </header>
 
-        <div class="topbar">
+      <section class="stats-grid" aria-label="Tong quan quy">
+        <article class="stat-card">
+          <span>Tong quy</span>
+          <strong id="totalFund">0 d</strong>
+        </article>
+        <article class="stat-card">
+          <span>Da chi</span>
+          <strong id="totalSpent">0 d</strong>
+        </article>
+        <article class="stat-card">
+          <span>Thanh vien</span>
+          <strong id="memberCount">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Giao dich cho xu ly</span>
+          <strong id="pendingCount">0</strong>
+        </article>
+      </section>
+
+      <nav class="tabs" aria-label="Chuc nang">
+        <button class="tab active" type="button" data-tab="members">Thanh vien</button>
+        <button class="tab" type="button" data-tab="deposit">Nap quy</button>
+        <button class="tab" type="button" data-tab="events">Buoi an/nhau</button>
+        <button class="tab" type="button" data-tab="history">Lich su</button>
+      </nav>
+
+      <section id="members" class="tab-panel active">
+        <div class="section-head">
           <div>
-            <span class="label">Điểm</span>
-            <strong id="score">0</strong>
-          </div>
-          <div>
-            <span class="label">Thời gian</span>
-            <strong id="time">60</strong>
-          </div>
-          <div>
-            <span class="label">Kỷ lục</span>
-            <strong id="best">0</strong>
+            <h2>Thanh vien va so du</h2>
+            <p>Moi nguoi co ma nap rieng. So du = tien da nop - phan chi phi duoc phan bo.</p>
           </div>
         </div>
 
-        <div class="status" id="status">Nhấn Bắt đầu để cấp quyền camera</div>
+        <form id="memberForm" class="form-grid">
+          <label>
+            Ten thanh vien
+            <input id="memberName" autocomplete="off" placeholder="Vi du: Minh" required />
+          </label>
+          <label>
+            Ngan hang/vi nap
+            <input id="memberWallet" autocomplete="off" placeholder="Momo, MB, Techcombank..." />
+          </label>
+          <button type="submit">Them thanh vien</button>
+        </form>
 
-        <section class="panel" id="panel">
-          <h1>Hứng Điểm</h1>
-          <p>Dùng bàn tay trước camera để điều khiển vùng sáng và hứng các điểm rơi.</p>
-          <button id="startButton" type="button" onclick="window.startHandCatchGame && window.startHandCatchGame(event)">Bắt đầu</button>
-          <button id="switchButton" type="button" class="secondary" onclick="window.switchHandCatchCamera && window.switchHandCatchCamera(event)">Đổi camera</button>
-          <p class="hint">Cần HTTPS khi test trên điện thoại. Localhost vẫn được hỗ trợ trên máy tính.</p>
-        </section>
+        <div id="memberList" class="member-list"></div>
+      </section>
+
+      <section id="deposit" class="tab-panel">
+        <div class="section-head">
+          <div>
+            <h2>Nap quy va tu nhan dien</h2>
+            <p>Trong ban that, webhook ngan hang se doc noi dung chuyen khoan. Demo nay mo phong bang noi dung giao dich.</p>
+          </div>
+        </div>
+
+        <div class="two-column">
+          <form id="depositForm" class="card-form">
+            <h3>Ghi nhan nop quy</h3>
+            <label>
+              Thanh vien
+              <select id="depositMember" required></select>
+            </label>
+            <label>
+              So tien
+              <input id="depositAmount" type="number" min="1000" step="1000" placeholder="500000" required />
+            </label>
+            <label>
+              Ghi chu
+              <input id="depositNote" placeholder="Nop quy thang 6" />
+            </label>
+            <button type="submit">Luu khoan nop</button>
+          </form>
+
+          <form id="bankForm" class="card-form">
+            <h3>Mo phong sao ke ngan hang</h3>
+            <label>
+              Noi dung chuyen khoan
+              <input id="bankContent" placeholder="QANCHOI ANHMINH01" required />
+            </label>
+            <label>
+              So tien
+              <input id="bankAmount" type="number" min="1000" step="1000" placeholder="300000" required />
+            </label>
+            <button type="submit">Tu nhan dien thanh vien</button>
+            <p class="hint">Neu noi dung co ma nap cua thanh vien, he thong se tu cong vao quy cua nguoi do.</p>
+          </form>
+        </div>
+
+        <div id="qrBoard" class="qr-board"></div>
+      </section>
+
+      <section id="events" class="tab-panel">
+        <div class="section-head">
+          <div>
+            <h2>Tao buoi an/nhau</h2>
+            <p>Chon nguoi tham gia, nhap tong bill, tien khach la va cach tinh. He thong tu tru so du tung nguoi.</p>
+          </div>
+        </div>
+
+        <form id="eventForm" class="event-form">
+          <label>
+            Ten buoi
+            <input id="eventName" placeholder="Nhau toi thu bay" required />
+          </label>
+          <label>
+            Tong bill
+            <input id="eventAmount" type="number" min="1000" step="1000" placeholder="1800000" required />
+          </label>
+          <label>
+            Tien nguoi la/khach moi
+            <input id="guestAmount" type="number" min="0" step="1000" value="0" />
+          </label>
+          <label>
+            Gan tien nguoi la cho
+            <select id="guestOwner"></select>
+          </label>
+          <label>
+            Cach phan bo
+            <select id="splitMode">
+              <option value="equal">Chia deu cho nguoi tham gia</option>
+              <option value="owner-pays-guest">Chia deu bill, nguoi duoc gan tra phan khach la</option>
+            </select>
+          </label>
+
+          <fieldset class="participant-box">
+            <legend>Thanh vien tham gia</legend>
+            <div id="participantList" class="participant-list"></div>
+          </fieldset>
+
+          <button type="submit">Tao buoi va phan bo tien</button>
+        </form>
+
+        <div id="eventPreview" class="preview-box"></div>
+      </section>
+
+      <section id="history" class="tab-panel">
+        <div class="section-head">
+          <div>
+            <h2>Lich su quy</h2>
+            <p>Theo doi tien vao, tien ra, va cac giao dich chua nhan dien duoc.</p>
+          </div>
+        </div>
+        <div id="ledger" class="ledger"></div>
       </section>
     </main>
 
-    <script>
-      window.HAND_CATCH_VERSION = "v5";
-      document.addEventListener("DOMContentLoaded", function () {
-        var status = document.querySelector("#status");
-        if (status) status.textContent = "Nhấn Bắt đầu để cấp quyền camera";
-      });
-    </script>
-    <script src="./src/main.js?v=5"></script>
+    <script src="./src/main.js"></script>
   </body>
 </html>

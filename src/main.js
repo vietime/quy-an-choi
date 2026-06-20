@@ -1,370 +1,485 @@
-const video = document.querySelector("#camera");
-const canvas = document.querySelector("#game");
-const ctx = canvas.getContext("2d");
-const panel = document.querySelector("#panel");
-const startButton = document.querySelector("#startButton");
-const switchButton = document.querySelector("#switchButton");
-const statusEl = document.querySelector("#status");
-const scoreEl = document.querySelector("#score");
-const timeEl = document.querySelector("#time");
-const bestEl = document.querySelector("#best");
+const STORAGE_KEY = "playFundApp.v1";
 
-const GAME_SECONDS = 60;
-const FALLER_COUNT = 6;
-const CATCH_RADIUS = 58;
+const currency = new Intl.NumberFormat("vi-VN", {
+  style: "currency",
+  currency: "VND",
+  maximumFractionDigits: 0,
+});
 
-let handLandmarker;
-let mediaPipeVision;
-let stream;
-let cameraFacing = "user";
-let started = false;
-let score = 0;
-let best = Number(localStorage.getItem("handCatchBest") || 0);
-let timeLeft = GAME_SECONDS;
-let lastVideoTime = -1;
-let lastFrame = performance.now();
-let gameEndsAt = 0;
-let hand = null;
-let touchControl = null;
-let fallers = [];
-let audioContext = null;
-let audioEnabled = false;
+const els = {
+  totalFund: document.querySelector("#totalFund"),
+  totalSpent: document.querySelector("#totalSpent"),
+  memberCount: document.querySelector("#memberCount"),
+  pendingCount: document.querySelector("#pendingCount"),
+  memberForm: document.querySelector("#memberForm"),
+  memberName: document.querySelector("#memberName"),
+  memberWallet: document.querySelector("#memberWallet"),
+  memberList: document.querySelector("#memberList"),
+  depositForm: document.querySelector("#depositForm"),
+  depositMember: document.querySelector("#depositMember"),
+  depositAmount: document.querySelector("#depositAmount"),
+  depositNote: document.querySelector("#depositNote"),
+  bankForm: document.querySelector("#bankForm"),
+  bankContent: document.querySelector("#bankContent"),
+  bankAmount: document.querySelector("#bankAmount"),
+  qrBoard: document.querySelector("#qrBoard"),
+  eventForm: document.querySelector("#eventForm"),
+  eventName: document.querySelector("#eventName"),
+  eventAmount: document.querySelector("#eventAmount"),
+  guestAmount: document.querySelector("#guestAmount"),
+  guestOwner: document.querySelector("#guestOwner"),
+  splitMode: document.querySelector("#splitMode"),
+  participantList: document.querySelector("#participantList"),
+  eventPreview: document.querySelector("#eventPreview"),
+  ledger: document.querySelector("#ledger"),
+  resetDemo: document.querySelector("#resetDemo"),
+};
 
-bestEl.textContent = best;
+let state = loadState();
 
-function setStatus(message) {
-  statusEl.textContent = message;
-}
-
-function initAudio() {
-  if (audioEnabled) return;
-  var AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
-  audioContext = audioContext || new AudioContextClass();
-  if (audioContext.state === "suspended") {
-    audioContext.resume();
+function loadState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   }
-  audioEnabled = true;
-}
 
-function playTone(frequency, duration, type, volume, whenOffset) {
-  if (!audioEnabled || !audioContext) return;
-  var startAt = audioContext.currentTime + (whenOffset || 0);
-  var oscillator = audioContext.createOscillator();
-  var gain = audioContext.createGain();
-  oscillator.type = type || "sine";
-  oscillator.frequency.setValueAtTime(frequency, startAt);
-  gain.gain.setValueAtTime(0.0001, startAt);
-  gain.gain.exponentialRampToValueAtTime(volume || 0.08, startAt + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-  oscillator.connect(gain);
-  gain.connect(audioContext.destination);
-  oscillator.start(startAt);
-  oscillator.stop(startAt + duration + 0.03);
-}
+  const now = Date.now();
+  const members = [
+    makeMember("Minh", "MB Bank"),
+    makeMember("Hieu", "Momo"),
+    makeMember("Trang", "Techcombank"),
+  ];
 
-function playStartSound() {
-  playTone(392, 0.11, "triangle", 0.07, 0);
-  playTone(523, 0.13, "triangle", 0.08, 0.09);
-  playTone(659, 0.16, "triangle", 0.08, 0.18);
-}
-
-function playCatchSound() {
-  playTone(740, 0.07, "square", 0.045, 0);
-  playTone(988, 0.09, "triangle", 0.05, 0.045);
-}
-
-function playEndSound() {
-  playTone(523, 0.14, "sawtooth", 0.055, 0);
-  playTone(392, 0.18, "sawtooth", 0.055, 0.12);
-  playTone(262, 0.24, "sine", 0.06, 0.28);
-}
-
-function playSwitchSound() {
-  playTone(330, 0.07, "triangle", 0.045, 0);
-  playTone(440, 0.08, "triangle", 0.045, 0.06);
-}
-
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker
-    .getRegistrations()
-    .then((registrations) => registrations.forEach((registration) => registration.unregister()))
-    .catch(() => {});
-}
-
-function resizeCanvas() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = Math.round(rect.width * dpr);
-  canvas.height = Math.round(rect.height * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
-function randomFaller(width, height, resetAbove = true) {
-  const size = 18 + Math.random() * 22;
   return {
-    x: size + Math.random() * Math.max(1, width - size * 2),
-    y: resetAbove ? -size - Math.random() * height : Math.random() * height,
-    size,
-    speed: 120 + Math.random() * 210,
-    hue: 38 + Math.random() * 70,
+    members,
+    ledger: [
+      makeLedger("deposit", members[0].id, 500000, "Nap quy ban dau", now - 900000),
+      makeLedger("deposit", members[1].id, 400000, "Nap quy ban dau", now - 800000),
+      makeLedger("deposit", members[2].id, 300000, "Nap quy ban dau", now - 700000),
+    ],
   };
 }
 
-function resetGame() {
-  score = 0;
-  timeLeft = GAME_SECONDS;
-  gameEndsAt = performance.now() + GAME_SECONDS * 1000;
-  fallers = Array.from({ length: FALLER_COUNT }, () =>
-    randomFaller(canvas.clientWidth, canvas.clientHeight, false),
-  );
-  scoreEl.textContent = score;
-  timeEl.textContent = timeLeft;
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-async function initHandLandmarker() {
-  if (handLandmarker) return;
-  setStatus("Đang tải model nhận diện tay...");
+function makeId(prefix) {
+  return `${prefix}_${Math.random().toString(36).slice(2, 9)}_${Date.now().toString(36)}`;
+}
 
-  if (!mediaPipeVision) {
-    mediaPipeVision = await loadMediaPipeVision();
-  }
+function normalizeCode(value) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/gi, "")
+    .toUpperCase()
+    .slice(0, 12);
+}
 
-  const vision = await mediaPipeVision.FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
-  );
-  handLandmarker = await mediaPipeVision.HandLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+function makeMember(name, wallet) {
+  const base = normalizeCode(name) || "TV";
+  const suffix = String(Math.floor(10 + Math.random() * 89));
+  return {
+    id: makeId("member"),
+    name: name.trim(),
+    wallet: (wallet || "").trim(),
+    code: `QAC${base}${suffix}`,
+    createdAt: Date.now(),
+  };
+}
+
+function makeLedger(type, memberId, amount, note, createdAt = Date.now(), extra = {}) {
+  return {
+    id: makeId("ledger"),
+    type,
+    memberId,
+    amount: Number(amount) || 0,
+    note: note || "",
+    createdAt,
+    ...extra,
+  };
+}
+
+function money(value) {
+  return currency.format(Math.round(Number(value) || 0)).replace("₫", "d");
+}
+
+function memberById(id) {
+  return state.members.find((member) => member.id === id);
+}
+
+function getMemberTotals(memberId) {
+  return state.ledger.reduce(
+    (totals, entry) => {
+      if (entry.memberId !== memberId) return totals;
+      if (entry.type === "deposit") totals.deposited += entry.amount;
+      if (entry.type === "event-share") totals.spent += entry.amount;
+      return totals;
     },
-    runningMode: "VIDEO",
-    numHands: 1,
-  });
+    { deposited: 0, spent: 0 },
+  );
 }
 
-function loadMediaPipeVision() {
-  return new Promise(function (resolve, reject) {
-    var moduleScript = document.createElement("script");
-    var callbackName = "__handCatchMediaPipeReady";
-    moduleScript.type = "module";
-    moduleScript.textContent =
-      "import * as vision from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs'; window." +
-      callbackName +
-      "(vision);";
-    window[callbackName] = function (vision) {
-      delete window[callbackName];
-      resolve(vision);
-    };
-    moduleScript.onerror = function () {
-      delete window[callbackName];
-      reject(new Error("Không tải được MediaPipe"));
-    };
-    document.head.appendChild(moduleScript);
-  });
+function getBalance(memberId) {
+  const totals = getMemberTotals(memberId);
+  return totals.deposited - totals.spent;
 }
 
-async function startCamera() {
-  if (stream) {
-    stream.getTracks().forEach((track) => track.stop());
-  }
-
-  stream = await navigator.mediaDevices.getUserMedia({
-    audio: false,
-    video: {
-      facingMode: cameraFacing,
-      width: { ideal: 960 },
-      height: { ideal: 1280 },
+function allTotals() {
+  return state.members.reduce(
+    (totals, member) => {
+      const memberTotals = getMemberTotals(member.id);
+      totals.deposited += memberTotals.deposited;
+      totals.spent += memberTotals.spent;
+      return totals;
     },
-  });
-  video.srcObject = stream;
-  await video.play();
+    { deposited: 0, spent: 0 },
+  );
 }
 
-function updateHand() {
-  if (!handLandmarker || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-    hand = touchControl;
+function render() {
+  saveState();
+  renderStats();
+  renderMemberOptions();
+  renderMembers();
+  renderParticipants();
+  renderQrBoard();
+  renderEventPreview();
+  renderLedger();
+}
+
+function renderStats() {
+  const totals = allTotals();
+  const pending = state.ledger.filter((entry) => entry.type === "pending").length;
+  els.totalFund.textContent = money(totals.deposited - totals.spent);
+  els.totalSpent.textContent = money(totals.spent);
+  els.memberCount.textContent = state.members.length;
+  els.pendingCount.textContent = pending;
+}
+
+function renderMemberOptions() {
+  const optionHtml = state.members
+    .map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`)
+    .join("");
+
+  els.depositMember.innerHTML = optionHtml;
+  els.guestOwner.innerHTML = `<option value="">Khong gan</option>${optionHtml}`;
+}
+
+function renderMembers() {
+  if (!state.members.length) {
+    els.memberList.innerHTML = `<div class="empty">Chua co thanh vien nao.</div>`;
     return;
   }
-  if (video.currentTime === lastVideoTime) return;
 
-  lastVideoTime = video.currentTime;
-  let result;
-  try {
-    result = handLandmarker.detectForVideo(video, performance.now());
-  } catch {
-    result = handLandmarker.detectForVideo(video);
-  }
-  const landmarks = result.landmarks && result.landmarks[0];
-  if (!landmarks) {
-    hand = touchControl;
+  els.memberList.innerHTML = state.members
+    .map((member) => {
+      const totals = getMemberTotals(member.id);
+      const balance = totals.deposited - totals.spent;
+      const balanceClass = balance < 0 ? "negative" : "positive";
+      return `
+        <article class="member-card">
+          <div class="member-top">
+            <div>
+              <p class="member-name">${escapeHtml(member.name)}</p>
+              <div class="member-code">${escapeHtml(member.code)}</div>
+            </div>
+            <button class="ghost danger" type="button" data-remove-member="${member.id}">Xoa</button>
+          </div>
+          <div class="balance ${balanceClass}">${money(balance)}</div>
+          <div class="mini-stats">
+            <span>Da nop <strong>${money(totals.deposited)}</strong></span>
+            <span>Da dung <strong>${money(totals.spent)}</strong></span>
+          </div>
+          <div class="muted">${escapeHtml(member.wallet || "Chua khai bao vi/gan hang")}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderParticipants() {
+  if (!state.members.length) {
+    els.participantList.innerHTML = `<div class="empty">Them thanh vien truoc khi tao buoi.</div>`;
     return;
   }
 
-  const palm = landmarks[9];
-  const x = (1 - palm.x) * canvas.clientWidth;
-  const y = palm.y * canvas.clientHeight;
-  hand = { x, y };
+  els.participantList.innerHTML = state.members
+    .map(
+      (member) => `
+        <label class="check-row">
+          <input type="checkbox" name="participant" value="${member.id}" checked />
+          <span>${escapeHtml(member.name)}</span>
+        </label>
+      `,
+    )
+    .join("");
 }
 
-function updateGame(dt, now) {
-  if (!started) return;
+function renderQrBoard() {
+  if (!state.members.length) {
+    els.qrBoard.innerHTML = `<div class="empty">Chua co ma nap de hien thi.</div>`;
+    return;
+  }
 
-  timeLeft = Math.max(0, Math.ceil((gameEndsAt - now) / 1000));
-  timeEl.textContent = timeLeft;
+  els.qrBoard.innerHTML = state.members
+    .map(
+      (member) => `
+        <article class="qr-card">
+          ${fakeQrSvg(member.code)}
+          <div>
+            <strong>${escapeHtml(member.name)}</strong>
+            <div class="member-code">${escapeHtml(member.code)}</div>
+          </div>
+          <p class="hint">Noi dung CK: ${escapeHtml(member.code)}</p>
+          <button class="ghost copy-code" type="button" data-copy-code="${member.code}">Copy ma</button>
+        </article>
+      `,
+    )
+    .join("");
+}
 
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  for (const faller of fallers) {
-    faller.y += faller.speed * dt;
-
-    if (hand) {
-      const dx = faller.x - hand.x;
-      const dy = faller.y - hand.y;
-      const hitDistance = CATCH_RADIUS + faller.size * 0.5;
-      if (dx * dx + dy * dy < hitDistance * hitDistance) {
-        score += 10;
-        scoreEl.textContent = score;
-        playCatchSound();
-        Object.assign(faller, randomFaller(width, height));
+function fakeQrSvg(code) {
+  const bits = Array.from(code).map((char) => char.charCodeAt(0));
+  const cells = [];
+  for (let y = 0; y < 9; y += 1) {
+    for (let x = 0; x < 9; x += 1) {
+      const value = bits[(x + y * 3) % bits.length] + x * 11 + y * 17;
+      if (value % 3 !== 0) {
+        cells.push(`<rect x="${x * 10 + 14}" y="${y * 10 + 14}" width="8" height="8" rx="1" />`);
       }
     }
+  }
+  const finder = `
+    <rect x="10" y="10" width="26" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="5" />
+    <rect x="82" y="10" width="26" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="5" />
+    <rect x="10" y="82" width="26" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="5" />
+  `;
+  return `<svg class="qr-code" viewBox="0 0 118 118" role="img" aria-label="Ma nap ${escapeHtml(code)}">${finder}<g fill="currentColor">${cells.join("")}</g></svg>`;
+}
 
-    if (faller.y > height + faller.size) {
-      Object.assign(faller, randomFaller(width, height));
+function renderEventPreview() {
+  const shares = calculateEventShares();
+  if (!shares.length) {
+    els.eventPreview.innerHTML = `<div class="empty">Chon thanh vien va nhap tong bill de xem truoc phan bo.</div>`;
+    return;
+  }
+
+  els.eventPreview.innerHTML = shares
+    .map(
+      (share) => `
+        <div class="split-row">
+          <div>
+            <strong>${escapeHtml(share.member.name)}</strong>
+            <div class="ledger-meta">${escapeHtml(share.reason)}</div>
+          </div>
+          <strong>${money(share.amount)}</strong>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderLedger() {
+  if (!state.ledger.length) {
+    els.ledger.innerHTML = `<div class="empty">Chua co lich su giao dich.</div>`;
+    return;
+  }
+
+  els.ledger.innerHTML = [...state.ledger]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((entry) => {
+      const member = memberById(entry.memberId);
+      const sign = entry.type === "deposit" ? "+" : entry.type === "event-share" ? "-" : "";
+      const amountClass = entry.type === "deposit" ? "in" : entry.type === "pending" ? "pending" : "out";
+      const title =
+        entry.type === "deposit"
+          ? "Nop quy"
+          : entry.type === "event-share"
+            ? `Chi phi: ${entry.eventName || "Buoi an/nhau"}`
+            : "Chua nhan dien";
+      return `
+        <article class="ledger-row">
+          <div>
+            <strong>${title}</strong>
+            <div class="ledger-meta">
+              ${member ? escapeHtml(member.name) : "Khong ro thanh vien"} - ${new Date(entry.createdAt).toLocaleString("vi-VN")}
+            </div>
+            <div class="muted">${escapeHtml(entry.note || "")}</div>
+          </div>
+          <div class="ledger-amount ${amountClass}">${sign}${money(entry.amount)}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function selectedParticipantIds() {
+  return Array.from(document.querySelectorAll('input[name="participant"]:checked')).map((input) => input.value);
+}
+
+function calculateEventShares() {
+  const total = Number(els.eventAmount.value) || 0;
+  const guestAmount = Number(els.guestAmount.value) || 0;
+  const participantIds = selectedParticipantIds();
+  if (!total || !participantIds.length) return [];
+
+  const participants = participantIds.map(memberById).filter(Boolean);
+  const guestOwner = memberById(els.guestOwner.value);
+  const mode = els.splitMode.value;
+  let baseTotal = total;
+  const shares = [];
+
+  if (mode === "equal" && guestAmount > 0) {
+    baseTotal = Math.max(0, total - guestAmount);
+  }
+
+  const baseShare = Math.floor(baseTotal / participants.length);
+  let remainder = baseTotal - baseShare * participants.length;
+
+  for (const member of participants) {
+    let amount = baseShare;
+    if (remainder > 0) {
+      amount += 1;
+      remainder -= 1;
     }
+    shares.push({
+      member,
+      amount,
+      reason: mode === "equal" ? "Chia deu sau khi tru tien khach la" : "Chia deu tong bill",
+    });
   }
 
-  if (timeLeft <= 0) {
-    started = false;
-    panel.hidden = false;
-    startButton.textContent = "Chơi lại";
-    playEndSound();
-    if (score > best) {
-      best = score;
-      localStorage.setItem("handCatchBest", String(best));
-      bestEl.textContent = best;
-    }
-    setStatus(`Hết giờ. Điểm của bạn: ${score}`);
-  } else {
-    setStatus(hand ? "Đang theo dõi bàn tay" : "Đưa bàn tay vào khung hình");
-  }
-}
-
-function draw() {
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  ctx.clearRect(0, 0, width, height);
-
-  const vignette = ctx.createRadialGradient(width / 2, height / 2, 40, width / 2, height / 2, width);
-  vignette.addColorStop(0, "rgba(16, 24, 32, 0)");
-  vignette.addColorStop(1, "rgba(16, 24, 32, 0.42)");
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, width, height);
-
-  for (const faller of fallers) {
-    ctx.beginPath();
-    ctx.arc(faller.x, faller.y, faller.size, 0, Math.PI * 2);
-    ctx.fillStyle = `hsl(${faller.hue} 92% 61% / 0.95)`;
-    ctx.shadowColor = `hsl(${faller.hue} 92% 61%)`;
-    ctx.shadowBlur = 18;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-  if (hand) {
-    ctx.beginPath();
-    ctx.arc(hand.x, hand.y, CATCH_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(57, 255, 174, 0.2)";
-    ctx.strokeStyle = "rgba(57, 255, 174, 0.95)";
-    ctx.lineWidth = 3;
-    ctx.fill();
-    ctx.stroke();
-  }
-}
-
-function loop(now) {
-  const dt = Math.min(0.05, (now - lastFrame) / 1000);
-  lastFrame = now;
-  updateHand();
-  updateGame(dt, now);
-  draw();
-  requestAnimationFrame(loop);
-}
-
-async function startGame() {
-  if (started) return;
-  try {
-    initAudio();
-    startButton.disabled = true;
-    setStatus("Đang xin quyền camera...");
-    await startCamera();
-    playStartSound();
-    setStatus("Camera đã mở. Đang tải nhận diện tay...");
-    resizeCanvas();
-    resetGame();
-    panel.hidden = true;
-    started = true;
-    setStatus("Đưa bàn tay vào khung hình. Nếu chạm màn hình, đó là chế độ dự phòng.");
-    initHandLandmarker()
-      .then(function () {
-        setStatus("Nhận diện tay sẵn sàng");
-      })
-      .catch(function (error) {
-        console.error(error);
-        setStatus("Camera đã chạy. Model tay lỗi, tạm dùng chạm màn hình để test game.");
+  if (mode === "owner-pays-guest" && guestOwner && guestAmount > 0) {
+    const ownerShare = shares.find((share) => share.member.id === guestOwner.id);
+    if (ownerShare) {
+      ownerShare.amount += guestAmount;
+      ownerShare.reason = `${ownerShare.reason}, cong phan khach la ${money(guestAmount)}`;
+    } else {
+      shares.push({
+        member: guestOwner,
+        amount: guestAmount,
+        reason: "Tra rieng phan khach la duoc gan",
       });
-  } catch (error) {
-    console.error(error);
-    const message = (error && error.message) || String(error);
-    setStatus(`Lỗi khởi động: ${message.slice(0, 90)}`);
-  } finally {
-    startButton.disabled = false;
-  }
-}
-
-async function switchCamera() {
-  cameraFacing = cameraFacing === "user" ? "environment" : "user";
-  if (stream || started) {
-    try {
-      await startCamera();
-      playSwitchSound();
-      setStatus(cameraFacing === "user" ? "Đang dùng camera trước" : "Đang dùng camera sau");
-    } catch (error) {
-      console.error(error);
-      setStatus("Không đổi được camera trên thiết bị này");
     }
   }
+
+  return shares;
 }
 
-function handleControlPoint(event) {
-  var point = event.touches ? event.touches[0] : event;
-  var rect = canvas.getBoundingClientRect();
-  touchControl = {
-    x: point.clientX - rect.left,
-    y: point.clientY - rect.top,
-  };
+function addDeposit(memberId, amount, note) {
+  state.ledger.push(makeLedger("deposit", memberId, amount, note));
 }
 
-function bindButton(button, handler) {
-  button.addEventListener("click", handler);
-  button.addEventListener("touchend", function (event) {
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function bindEvents() {
+  document.querySelectorAll(".tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((tab) => tab.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.remove("active"));
+      button.classList.add("active");
+      document.querySelector(`#${button.dataset.tab}`).classList.add("active");
+    });
+  });
+
+  els.memberForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    handler(event);
+    const name = els.memberName.value.trim();
+    if (!name) return;
+    state.members.push(makeMember(name, els.memberWallet.value));
+    els.memberForm.reset();
+    render();
+  });
+
+  els.memberList.addEventListener("click", (event) => {
+    const id = event.target.dataset.removeMember;
+    if (!id) return;
+    const hasLedger = state.ledger.some((entry) => entry.memberId === id);
+    if (hasLedger) {
+      alert("Thanh vien da co giao dich, khong nen xoa de giu lich su. Ban co the tao trang thai 'ngung tham gia' o ban that.");
+      return;
+    }
+    state.members = state.members.filter((member) => member.id !== id);
+    render();
+  });
+
+  els.depositForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    addDeposit(els.depositMember.value, Number(els.depositAmount.value), els.depositNote.value || "Nop quy thu cong");
+    els.depositForm.reset();
+    render();
+  });
+
+  els.bankForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const content = els.bankContent.value.toUpperCase();
+    const amount = Number(els.bankAmount.value) || 0;
+    const member = state.members.find((item) => content.includes(item.code));
+    if (member) {
+      addDeposit(member.id, amount, `Tu nhan dien sao ke: ${els.bankContent.value}`);
+    } else {
+      state.ledger.push(makeLedger("pending", null, amount, `Khong tim thay ma nap trong: ${els.bankContent.value}`));
+    }
+    els.bankForm.reset();
+    render();
+  });
+
+  els.qrBoard.addEventListener("click", async (event) => {
+    const code = event.target.dataset.copyCode;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      event.target.textContent = "Da copy";
+      setTimeout(() => {
+        event.target.textContent = "Copy ma";
+      }, 1000);
+    } catch {
+      alert(code);
+    }
+  });
+
+  ["input", "change"].forEach((eventName) => {
+    els.eventForm.addEventListener(eventName, renderEventPreview);
+  });
+
+  els.eventForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const shares = calculateEventShares();
+    if (!shares.length) {
+      alert("Can nhap tong bill va chon it nhat mot thanh vien.");
+      return;
+    }
+    const eventName = els.eventName.value.trim() || "Buoi an/nhau";
+    for (const share of shares) {
+      state.ledger.push(
+        makeLedger("event-share", share.member.id, share.amount, share.reason, Date.now(), {
+          eventName,
+        }),
+      );
+    }
+    els.eventForm.reset();
+    render();
+  });
+
+  els.resetDemo.addEventListener("click", () => {
+    localStorage.removeItem(STORAGE_KEY);
+    state = loadState();
+    render();
   });
 }
 
-window.startHandCatchGame = startGame;
-window.switchHandCatchCamera = switchCamera;
-
-bindButton(startButton, startGame);
-bindButton(switchButton, switchCamera);
-canvas.addEventListener("touchstart", handleControlPoint, { passive: true });
-canvas.addEventListener("touchmove", handleControlPoint, { passive: true });
-canvas.addEventListener("pointermove", handleControlPoint);
-window.addEventListener("resize", resizeCanvas);
-window.addEventListener("orientationchange", () => setTimeout(resizeCanvas, 250));
-
-resizeCanvas();
-requestAnimationFrame(loop);
-setStatus("Nhấn Bắt đầu để cấp quyền camera");
+bindEvents();
+render();

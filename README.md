@@ -22,7 +22,7 @@ Thành viên đăng nhập bằng Supabase Auth, chỉ xem số dư cá nhân, m
 MVP hiện hỗ trợ:
 
 - Người dùng tự đăng ký `Chủ quỹ mới` từ màn đăng nhập.
-- Hệ thống tạo Supabase Auth user, tạo quỹ mới và gắn người đó với role `admin`.
+- Hệ thống tạo Supabase Auth user, tạo quỹ mới, tạo luôn một thành viên cho chủ quỹ và gắn người đó với role `admin`.
 - Admin nhập tên/email thành viên trong tab `Thành viên` để tạo link mời.
 - Admin copy link mời gửi qua Zalo/Messenger.
 - Thành viên mở link hoặc dán mã mời ở màn `Tham gia bằng mã mời`, tự tạo tài khoản và được gắn vào quỹ với role `member`.

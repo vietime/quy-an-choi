@@ -27,7 +27,9 @@ set search_path = public
 as $$
 declare
   new_fund_id text;
+  new_member_id text;
   user_email text;
+  member_code text;
 begin
   if auth.uid() is null then
     raise exception 'Bạn cần đăng nhập để tạo quỹ.';
@@ -35,12 +37,17 @@ begin
 
   user_email := coalesce(auth.jwt() ->> 'email', '');
   new_fund_id := 'fund_' || replace(gen_random_uuid()::text, '-', '');
+  new_member_id := 'member_' || replace(gen_random_uuid()::text, '-', '');
+  member_code := 'QAC' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10));
 
   insert into public.funds (id, name)
   values (new_fund_id, fund_name);
 
+  insert into public.fund_members (id, fund_id, name, wallet, code)
+  values (new_member_id, new_fund_id, display_name, null, member_code);
+
   insert into public.profiles (user_id, fund_id, member_id, role, display_name, email)
-  values (auth.uid(), new_fund_id, null, 'admin', display_name, user_email);
+  values (auth.uid(), new_fund_id, new_member_id, 'admin', display_name, user_email);
 
   return query select new_fund_id;
 end;

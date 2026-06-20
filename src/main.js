@@ -101,6 +101,34 @@ function loadSession() {
   }
 }
 
+async function loadSupabaseAuthSession() {
+  if (!cloudClient) return false;
+  const authResult = await cloudClient.auth.getSession();
+  const authSession = authResult.data?.session;
+  if (!authSession?.user) return false;
+  return loadCloudProfile(authSession.user);
+}
+
+async function loadCloudProfile(user) {
+  const { data, error } = await cloudClient
+    .from("profiles")
+    .select("*")
+    .eq("fund_id", FUND_ID)
+    .eq("user_id", user.id)
+    .single();
+
+  if (error) throw error;
+  session = {
+    role: data.role,
+    name: data.display_name,
+    email: data.email || user.email,
+    memberId: data.member_id,
+    userId: user.id,
+    cloud: true,
+  };
+  return true;
+}
+
 function saveSession() {
   if (session) {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -125,13 +153,6 @@ async function loadCloudState() {
   try {
     cloudStatus = "Đang kết nối";
     renderDbStatus();
-
-    const fundResult = await cloudClient.from("funds").upsert({
-      id: FUND_ID,
-      name: "Quỹ Ăn Chơi",
-      updated_at: new Date().toISOString(),
-    });
-    if (fundResult.error) throw fundResult.error;
 
     const membersResult = await cloudClient
       .from("fund_members")
@@ -201,7 +222,7 @@ async function loadCloudState() {
 }
 
 function queueCloudSave() {
-  if (!session || !cloudClient || !cloudLoaded) return;
+  if (!session || !isAdmin() || !cloudClient || !cloudLoaded) return;
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer = setTimeout(() => {
     saveCloudStateNow().catch((error) => {
@@ -738,24 +759,45 @@ function bindEvents() {
   els.loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const account = demoAccounts()[els.loginAccount.value];
-    if (!account || els.loginPassword.value !== account.password) {
-      els.loginMessage.textContent = "Sai tài khoản hoặc mật khẩu demo.";
-      return;
+    if (!account) return;
+
+    try {
+      els.loginMessage.textContent = cloudClient ? "Đang đăng nhập Supabase..." : "";
+      if (cloudClient) {
+        const authResult = await cloudClient.auth.signInWithPassword({
+          email: account.email,
+          password: els.loginPassword.value,
+        });
+        if (authResult.error) throw authResult.error;
+        await loadCloudProfile(authResult.data.user);
+        await loadCloudState();
+      } else {
+        if (els.loginPassword.value !== account.password) {
+          throw new Error("Sai tài khoản hoặc mật khẩu demo.");
+        }
+        session = {
+          role: account.role,
+          name: account.name,
+          email: account.email,
+          memberId: account.memberId,
+          cloud: false,
+        };
+      }
+
+      els.loginPassword.value = "";
+      els.loginMessage.textContent = "";
+      activateTab("members");
+      render();
+    } catch (error) {
+      console.error(error);
+      els.loginMessage.textContent = error.message || "Không đăng nhập được.";
     }
-    session = {
-      role: account.role,
-      name: account.name,
-      email: account.email,
-      memberId: account.memberId,
-    };
-    els.loginPassword.value = "";
-    els.loginMessage.textContent = "";
-    activateTab("members");
-    await loadCloudState();
-    render();
   });
 
-  els.logoutButton.addEventListener("click", () => {
+  els.logoutButton.addEventListener("click", async () => {
+    if (cloudClient) {
+      await cloudClient.auth.signOut();
+    }
     session = null;
     render();
   });
@@ -883,7 +925,20 @@ function bindEvents() {
 }
 
 async function init() {
-  if (session) {
+  if (cloudClient) {
+    try {
+      const restored = await loadSupabaseAuthSession();
+      if (restored) {
+        await loadCloudState();
+      } else {
+        session = null;
+      }
+    } catch (error) {
+      console.error(error);
+      session = null;
+      cloudStatus = "Chưa đăng nhập Supabase";
+    }
+  } else if (session) {
     await loadCloudState();
   }
   render();

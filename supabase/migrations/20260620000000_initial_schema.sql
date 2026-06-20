@@ -15,18 +15,6 @@ create table if not exists public.fund_members (
   created_at timestamptz not null default now()
 );
 
-create table if not exists public.ledger_entries (
-  id text primary key,
-  fund_id text not null references public.funds(id) on delete cascade,
-  member_id text references public.fund_members(id) on delete set null,
-  type text not null check (type in ('deposit', 'event-share', 'pending')),
-  amount bigint not null check (amount >= 0),
-  note text,
-  event_id text,
-  event_name text,
-  created_at timestamptz not null default now()
-);
-
 create table if not exists public.events (
   id text primary key,
   fund_id text not null references public.funds(id) on delete cascade,
@@ -39,21 +27,17 @@ create table if not exists public.events (
   created_at timestamptz not null default now()
 );
 
-alter table public.ledger_entries
-  add column if not exists event_id text;
-
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conname = 'ledger_entries_event_id_fkey'
-  ) then
-    alter table public.ledger_entries
-      add constraint ledger_entries_event_id_fkey
-      foreign key (event_id) references public.events(id) on delete set null;
-  end if;
-end $$;
+create table if not exists public.ledger_entries (
+  id text primary key,
+  fund_id text not null references public.funds(id) on delete cascade,
+  member_id text references public.fund_members(id) on delete set null,
+  type text not null check (type in ('deposit', 'event-share', 'pending')),
+  amount bigint not null check (amount >= 0),
+  note text,
+  event_id text references public.events(id) on delete set null,
+  event_name text,
+  created_at timestamptz not null default now()
+);
 
 create table if not exists public.event_participants (
   event_id text not null references public.events(id) on delete cascade,
@@ -86,14 +70,3 @@ alter table public.ledger_entries enable row level security;
 alter table public.events enable row level security;
 alter table public.event_participants enable row level security;
 alter table public.profiles enable row level security;
-
-drop policy if exists "prototype_read_funds" on public.funds;
-drop policy if exists "prototype_write_funds" on public.funds;
-drop policy if exists "prototype_read_members" on public.fund_members;
-drop policy if exists "prototype_write_members" on public.fund_members;
-drop policy if exists "prototype_read_ledger" on public.ledger_entries;
-drop policy if exists "prototype_write_ledger" on public.ledger_entries;
-drop policy if exists "prototype_read_events" on public.events;
-drop policy if exists "prototype_write_events" on public.events;
-drop policy if exists "prototype_read_event_participants" on public.event_participants;
-drop policy if exists "prototype_write_event_participants" on public.event_participants;

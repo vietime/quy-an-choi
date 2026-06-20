@@ -18,9 +18,9 @@ Admin:      admin@quy.local / admin123
 Thành viên: minh@quy.local  / minh123
 ```
 
-Admin có thể quản lý thành viên, nộp quỹ, mô phỏng sao kê, tạo buổi ăn/nhậu và xem toàn bộ lịch sử.
+Admin đăng nhập bằng Supabase Auth, có thể quản lý thành viên, nộp quỹ, mô phỏng sao kê, tạo buổi ăn/nhậu và xem toàn bộ lịch sử.
 
-Thành viên chỉ xem số dư cá nhân, mã nạp của mình và lịch sử giao dịch của mình.
+Thành viên đăng nhập bằng Supabase Auth, chỉ xem số dư cá nhân, mã nạp của mình và lịch sử giao dịch của mình.
 
 ## Chạy local
 
@@ -41,15 +41,16 @@ Dữ liệu demo lưu trong `localStorage` của trình duyệt. Đăng nhập a
 Prototype này hỗ trợ 2 chế độ:
 
 - Nếu `src/config.js` chưa có Supabase URL/key, app dùng `localStorage` của trình duyệt để chạy demo.
-- Nếu đã cấu hình Supabase, app đọc/ghi dữ liệu vào PostgreSQL qua Supabase.
+- Nếu đã cấu hình Supabase, app dùng Supabase Auth + PostgreSQL + Row Level Security.
 
 ## Tạo CSDL Supabase/PostgreSQL
 
 1. Tạo project mới trên Supabase.
 2. Vào `SQL Editor` và chạy toàn bộ file [supabase/schema.sql](supabase/schema.sql).
-3. Vào `Project Settings` -> `API`.
-4. Copy `Project URL` và `anon public key`.
-5. Mở [src/config.js](src/config.js) và điền:
+3. Chạy tiếp file [supabase/rls_auth.sql](supabase/rls_auth.sql) để bật policy theo tài khoản admin/thành viên.
+4. Vào `Project Settings` -> `API`.
+5. Copy `Project URL` và `anon public key`.
+6. Mở [src/config.js](src/config.js) và điền:
 
 ```js
 window.APP_CONFIG = {
@@ -61,7 +62,13 @@ window.APP_CONFIG = {
 
 Sau khi deploy lại GitHub Pages, trạng thái `CSDL` trên giao diện sẽ chuyển từ `Local demo` sang `Supabase/PostgreSQL`.
 
-Lưu ý: policy trong `supabase/schema.sql` đang mở đọc/ghi cho anon key để prototype chạy ngay trên GitHub Pages. Bản thật phải thay bằng Supabase Auth + RLS theo vai trò admin/thành viên, và các thao tác cộng/trừ tiền quan trọng nên xử lý qua backend hoặc Edge Functions.
+Hiện bản online đã dùng Supabase Auth + RLS:
+
+- Admin được đọc/ghi dữ liệu quỹ.
+- Thành viên chỉ đọc được hồ sơ, số dư và lịch sử của chính mình.
+- Anon/public key không ghi được dữ liệu nếu chưa đăng nhập.
+
+Lưu ý bảo mật tiếp theo: các thao tác cộng/trừ tiền quan trọng vẫn nên chuyển vào Supabase Edge Functions hoặc backend riêng để tránh tin hoàn toàn vào logic client.
 
 ## Nguyên tắc tính tiền
 

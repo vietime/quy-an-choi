@@ -1,4 +1,4 @@
-const STORAGE_KEY = "playFundApp.v2";
+const STORAGE_KEY = "playFundApp.v3";
 const SESSION_KEY = "playFundSession.v1";
 
 const currency = new Intl.NumberFormat("vi-VN", {

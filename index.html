@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0f766e" />
     <title>Quỹ Ăn Chơi</title>
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=20260621-4" />
+    <link rel="stylesheet" href="./styles.css?v=20260621-5" />
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
@@ -40,6 +40,12 @@
       <symbol id="icon-sparkle" viewBox="0 0 24 24">
         <path d="M12 3 14.2 8.8 20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2Z" />
       </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <path d="m5 12 4 4 10-10" />
+      </symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24">
+        <path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7l1-3h4l1 3" />
+      </symbol>
     </svg>
     <main class="app">
       <section id="loginScreen" class="login-screen" aria-label="Đăng nhập">
@@ -66,7 +72,7 @@
               Mật khẩu
               <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" required />
             </label>
-            <button type="submit">Đăng nhập</button>
+            <button class="icon-button" type="submit"><svg class="icon"><use href="#icon-check"></use></svg><span>Đăng nhập</span></button>
             <p id="loginMessage" class="hint"></p>
           </form>
 
@@ -89,7 +95,7 @@
                 Tên quỹ
                 <input id="ownerFundName" placeholder="Ví dụ: Quỹ ăn chơi lớp A" required />
               </label>
-              <button type="submit">Tạo tài khoản chủ quỹ</button>
+              <button class="icon-button" type="submit"><svg class="icon"><use href="#icon-wallet"></use></svg><span>Tạo tài khoản chủ quỹ</span></button>
               <p id="ownerSignupMessage" class="hint"></p>
             </form>
           </details>
@@ -113,7 +119,7 @@
                 Mật khẩu
                 <input id="invitePassword" type="password" autocomplete="new-password" minlength="6" required />
               </label>
-              <button type="submit">Đăng ký tham gia quỹ</button>
+              <button class="icon-button" type="submit"><svg class="icon"><use href="#icon-users"></use></svg><span>Đăng ký tham gia quỹ</span></button>
               <p id="inviteSignupMessage" class="hint"></p>
             </form>
           </details>
@@ -142,7 +148,7 @@
               <span id="currentUserName">Chưa đăng nhập</span>
               <strong id="currentRole">-</strong>
             </div>
-            <button id="logoutButton" class="ghost" type="button">Đăng xuất</button>
+            <button id="logoutButton" class="ghost icon-button" type="button"><svg class="icon"><use href="#icon-check"></use></svg><span>Đăng xuất</span></button>
           </div>
         </header>
 
@@ -209,7 +215,7 @@
               Email mời
               <input id="memberEmail" type="email" autocomplete="off" placeholder="minh@example.com" />
             </label>
-            <button type="submit">Tạo link mời</button>
+            <button class="icon-button" type="submit"><svg class="icon"><use href="#icon-users"></use></svg><span>Tạo link mời</span></button>
             <p id="memberInviteMessage" class="hint form-message"></p>
           </form>
 
@@ -248,7 +254,7 @@
                 Mẫu nội dung chuyển khoản
                 <input id="fundTransferTemplate" autocomplete="off" placeholder="QAC-{MA_THANH_VIEN}" />
               </label>
-              <button type="submit">Lưu tài khoản quỹ</button>
+              <button class="icon-button" type="submit"><svg class="icon"><use href="#icon-wallet"></use></svg><span>Lưu tài khoản quỹ</span></button>
               <p id="fundBankMessage" class="hint"></p>
             </form>
 
@@ -266,7 +272,7 @@
                 Ghi chú
                 <input id="depositNote" placeholder="Nộp quỹ tháng 6" />
               </label>
-              <button type="submit">Lưu khoản nộp</button>
+              <button class="icon-button" type="submit"><svg class="icon"><use href="#icon-check"></use></svg><span>Lưu khoản nộp</span></button>
               <p class="hint">Dùng khi admin nhận tiền mặt hoặc cần nhập tay sau khi kiểm tra sao kê.</p>
             </form>
           </div>
@@ -287,7 +293,7 @@
               Ghi chú hoặc mã giao dịch
               <input id="requestNote" placeholder="Ví dụ: chuyển từ MB, lúc 20:15" />
             </label>
-            <button type="submit">Tôi đã chuyển khoản</button>
+            <button class="icon-button" type="submit"><svg class="icon"><use href="#icon-qr"></use></svg><span>Tôi đã chuyển khoản</span></button>
             <p class="hint">Admin sẽ kiểm tra sao kê và xác nhận. Sau khi xác nhận, tiền mới được cộng vào quỹ.</p>
           </form>
 
@@ -316,7 +322,7 @@
                 Số tiền
                 <input id="expenseAmount" type="number" min="1000" step="1000" placeholder="300000" required />
               </label>
-              <button type="submit">Tạo khoản chi và chia đều</button>
+              <button class="icon-button" type="submit"><svg class="icon"><use href="#icon-receipt"></use></svg><span>Tạo khoản chi và chia đều</span></button>
               <p class="hint">Khoản chi sẽ được chia đều và trừ vào tất cả thành viên hiện có trong quỹ.</p>
             </form>
           </div>
@@ -351,7 +357,7 @@
               <div id="participantList" class="participant-list"></div>
             </fieldset>
 
-            <button type="submit">Tạo buổi và phân bổ tiền</button>
+            <button class="icon-button" type="submit"><svg class="icon"><use href="#icon-sparkle"></use></svg><span>Tạo buổi và phân bổ tiền</span></button>
           </form>
 
           <div id="eventPreview" class="preview-box admin-only"></div>
@@ -422,7 +428,7 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="./src/config.js?v=20260621-4"></script>
-    <script src="./src/main.js?v=20260621-4"></script>
+    <script src="./src/config.js?v=20260621-5"></script>
+    <script src="./src/main.js?v=20260621-5"></script>
   </body>
 </html>

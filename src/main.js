@@ -940,11 +940,12 @@ function renderMembers() {
       const balance = totals.deposited - totals.spent;
       const balanceClass = balance < 0 ? "negative" : "positive";
       const removeButton = isAdmin()
-        ? `<button class="ghost danger" type="button" data-remove-member="${member.id}">Xóa</button>`
+        ? `<button class="ghost danger icon-button" type="button" data-remove-member="${member.id}">${icon("trash")}<span>Xóa</span></button>`
         : "";
       return `
         <article class="member-card">
           <div class="member-top">
+            <div class="card-avatar">${icon("users")}</div>
             <div>
               <p class="member-name">${escapeHtml(member.name)}</p>
               <div class="member-code">${escapeHtml(member.code)}</div>
@@ -983,15 +984,16 @@ function renderInvites() {
           ? `
             <div class="pending-actions">
               <button type="button" data-copy-invite="${escapeHtml(link)}">Copy link</button>
-              <button class="ghost danger" type="button" data-revoke-invite="${invite.id}">Hủy</button>
+              <button class="ghost danger icon-button" type="button" data-revoke-invite="${invite.id}">${icon("trash")}<span>Hủy</span></button>
             </div>
           `
           : "";
       return `
-        <article class="ledger-row">
+        <article class="ledger-row app-list-row">
+          <div class="row-icon">${icon("users")}</div>
           <div>
             <strong>${escapeHtml(invite.memberName || invite.email || invite.code)}</strong>
-            <div class="ledger-meta">${statusText} - ${escapeHtml(invite.code)}</div>
+            <div class="ledger-meta"><span class="status-pill ${invite.status}">${statusText}</span> ${escapeHtml(invite.code)}</div>
             <div class="muted">${escapeHtml(link)}</div>
           </div>
           ${actions}
@@ -1046,14 +1048,17 @@ function renderQrBoard() {
           : `<p class="hint">Admin cần nhập tài khoản nhận quỹ để tạo QR chuyển khoản ngân hàng.</p>`;
         return `
         <article class="qr-card">
-          ${qr}
-          <div>
-            <strong>${escapeHtml(member.name)}</strong>
-            <div class="member-code">${escapeHtml(member.code)}</div>
+          <div class="qr-card-head">
+            ${qr}
+            <div>
+              <span class="status-pill pending">Mã nạp riêng</span>
+              <strong>${escapeHtml(member.name)}</strong>
+              <div class="member-code">${escapeHtml(member.code)}</div>
+            </div>
           </div>
           ${bankInfo}
           <p class="hint">Nội dung chuyển khoản: <strong>${escapeHtml(content)}</strong></p>
-          <button class="ghost copy-code" type="button" data-copy-code="${escapeHtml(content)}">Sao chép nội dung</button>
+          <button class="ghost copy-code icon-button" type="button" data-copy-code="${escapeHtml(content)}">${icon("qr")}<span>Sao chép nội dung</span></button>
         </article>
       `;
       },
@@ -1099,20 +1104,22 @@ function renderDepositRequests() {
       const memberName = member?.name || request.memberName || "Không rõ thành viên";
       const statusText =
         request.status === "approved" ? "Đã xác nhận" : request.status === "rejected" ? "Đã từ chối" : "Chờ xác nhận";
+      const statusClass = request.status === "approved" ? "approved" : request.status === "rejected" ? "rejected" : "pending";
       const actions =
         isAdmin() && request.status === "pending"
           ? `
             <div class="pending-actions">
-              <button type="button" data-approve-request="${request.id}">Xác nhận</button>
-              <button class="ghost danger" type="button" data-reject-request="${request.id}">Từ chối</button>
+              <button class="icon-button" type="button" data-approve-request="${request.id}">${icon("check")}<span>Xác nhận</span></button>
+              <button class="ghost danger icon-button" type="button" data-reject-request="${request.id}">${icon("trash")}<span>Từ chối</span></button>
             </div>
           `
           : "";
       return `
-        <article class="ledger-row">
+        <article class="ledger-row app-list-row deposit-request-row">
+          <div class="row-icon">${icon("qr")}</div>
           <div>
             <strong>${escapeHtml(memberName)} báo đã chuyển ${money(request.amount)}</strong>
-            <div class="ledger-meta">${statusText} - ${new Date(request.createdAt).toLocaleString("vi-VN")}</div>
+            <div class="ledger-meta"><span class="status-pill ${statusClass}">${statusText}</span> ${new Date(request.createdAt).toLocaleString("vi-VN")}</div>
             <div class="muted">${escapeHtml(request.note || "")}</div>
           </div>
           ${actions}
@@ -1208,15 +1215,16 @@ function renderEventHistory() {
       const adminActions = isAdmin()
         ? `
           <div class="pending-actions">
-            <button class="ghost" type="button" data-rename-event="${event.id}">Sửa tên</button>
-            <button class="ghost" type="button" data-adjust-event="${event.id}">Điều chỉnh tiền</button>
-            <button class="ghost danger" type="button" data-delete-event="${event.id}">Xóa</button>
+            <button class="ghost icon-button" type="button" data-rename-event="${event.id}">${icon("receipt")}<span>Sửa tên</span></button>
+            <button class="ghost icon-button" type="button" data-adjust-event="${event.id}">${icon("wallet")}<span>Điều chỉnh</span></button>
+            <button class="ghost danger icon-button" type="button" data-delete-event="${event.id}">${icon("trash")}<span>Xóa</span></button>
           </div>
         `
         : "";
       return `
         <article class="event-card">
-          <div class="ledger-row">
+          <div class="ledger-row app-list-row">
+            <div class="row-icon">${icon("receipt")}</div>
             <div>
               <strong>${escapeHtml(event.name)}</strong>
               <div class="ledger-meta">${new Date(event.createdAt).toLocaleString("vi-VN")} - ${participants.length} người - ${money(total)}</div>
@@ -1250,7 +1258,8 @@ function renderNotifications() {
   els.notificationList.innerHTML = notifications
     .map(
       (notification) => `
-        <article class="ledger-row">
+        <article class="ledger-row app-list-row">
+          <div class="row-icon">${icon("bell")}</div>
           <div>
             <strong>${escapeHtml(notification.title)}</strong>
             <div class="ledger-meta">${new Date(notification.createdAt).toLocaleString("vi-VN")}</div>
@@ -1275,6 +1284,7 @@ function renderLedger() {
       const member = memberById(entry.memberId);
       const sign = entry.type === "deposit" ? "+" : entry.type === "event-share" ? "-" : "";
       const amountClass = entry.type === "deposit" ? "in" : entry.type === "pending" ? "pending" : "out";
+      const rowIcon = entry.type === "deposit" ? "wallet" : entry.type === "pending" ? "bell" : "receipt";
       const title =
         entry.type === "deposit"
           ? "Nộp quỹ"
@@ -1282,7 +1292,8 @@ function renderLedger() {
             ? `Chi phí: ${entry.eventName || "Buổi ăn/nhậu"}`
             : "Chưa nhận diện";
       return `
-        <article class="ledger-row">
+        <article class="ledger-row app-list-row transaction-row ${amountClass}">
+          <div class="row-icon">${icon(rowIcon)}</div>
           <div>
             <strong>${title}</strong>
             <div class="ledger-meta">
@@ -1737,6 +1748,10 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function icon(name) {
+  return `<svg class="icon" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
 }
 
 function bindEvents() {

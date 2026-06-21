@@ -95,6 +95,18 @@ button.danger {
   color: var(--danger);
 }
 
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.icon-button .icon {
+  width: 18px;
+  height: 18px;
+}
+
 input,
 select {
   width: 100%;
@@ -582,6 +594,37 @@ h3 {
   gap: 12px;
 }
 
+.card-avatar,
+.row-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+}
+
+.card-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 15px;
+}
+
+.row-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+}
+
+.app-list-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.app-list-row > .pending-actions {
+  align-self: start;
+}
+
 .member-name {
   margin: 0 0 3px;
   font-size: 18px;
@@ -650,6 +693,13 @@ h3 {
   gap: 10px;
 }
 
+.qr-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
 .transfer-info {
   display: grid;
   gap: 6px;
@@ -705,6 +755,51 @@ h3 {
 .ledger-amount.out,
 .ledger-amount.pending {
   color: var(--warning);
+}
+
+.transaction-row.in .row-icon {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.transaction-row.out .row-icon {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.transaction-row.pending .row-icon {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: #0f766e;
+  background: var(--primary-soft);
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.status-pill.pending {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.status-pill.approved,
+.status-pill.used {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.status-pill.rejected,
+.status-pill.revoked {
+  color: #b91c1c;
+  background: #fee2e2;
 }
 
 .empty {
@@ -868,6 +963,16 @@ body.is-logged-in .fab {
     scroll-snap-align: start;
   }
 
+  .app-list-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .app-list-row .ledger-amount,
+  .app-list-row > .pending-actions {
+    grid-column: 2;
+    justify-self: start;
+  }
+
   .tabs {
     position: fixed;
     right: 12px;
@@ -1005,6 +1110,29 @@ body.is-logged-in .fab {
   .ledger-row,
   .split-row {
     display: grid;
+  }
+
+  .app-list-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .row-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+  }
+
+  .pending-actions {
+    justify-content: flex-start;
+  }
+
+  .pending-actions button {
+    flex: 1 1 auto;
+  }
+
+  .qr-card-head {
+    align-items: start;
   }
 
   .tab-panel {

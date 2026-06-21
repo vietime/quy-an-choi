@@ -1,4 +1,4 @@
-const STORAGE_KEY = "playFundApp.v3";
+const STORAGE_KEY = "playFundApp.v4";
 const SESSION_KEY = "playFundSession.v1";
 
 const currency = new Intl.NumberFormat("vi-VN", {
@@ -313,7 +313,7 @@ async function registerOwnerAccount() {
   });
   if (error) throw error;
   await loadCloudProfile(user, data?.[0]?.fund_id);
-  await loadCloudState();
+  await loadCloudStateOrThrow();
 }
 
 async function registerWithInvite() {
@@ -331,7 +331,31 @@ async function registerWithInvite() {
   });
   if (error) throw error;
   await loadCloudProfile(user, data?.[0]?.fund_id);
-  await loadCloudState();
+  await loadCloudStateOrThrow();
+}
+
+async function ensureCurrentProfileMember(fundId = activeFundId()) {
+  if (!cloudClient || !session?.cloud || !fundId) return null;
+  const { data, error } = await cloudClient.rpc("ensure_current_profile_member", {
+    target_fund_id: fundId,
+  });
+  if (error) throw error;
+
+  const ensured = data?.[0] || null;
+  if (ensured?.member_id && session?.fundId === fundId) {
+    session = {
+      ...session,
+      memberId: ensured.member_id,
+      role: ensured.role || session.role,
+      profiles: (session.profiles || []).map((profile) =>
+        profile.fundId === fundId
+          ? { ...profile, memberId: ensured.member_id, role: ensured.role || profile.role }
+          : profile,
+      ),
+    };
+    saveSession();
+  }
+  return ensured;
 }
 
 async function loadCloudState() {
@@ -345,6 +369,10 @@ async function loadCloudState() {
 
     const fundResult = await cloudClient.from("funds").select("*").eq("id", activeFundId()).single();
     if (fundResult.error) throw fundResult.error;
+
+    if (session?.cloud) {
+      await ensureCurrentProfileMember(activeFundId());
+    }
 
     const membersResult = await cloudClient
       .from("fund_members")
@@ -459,6 +487,14 @@ async function loadCloudState() {
     cloudStatus = "Mất kết nối máy chủ";
     return false;
   }
+}
+
+async function loadCloudStateOrThrow() {
+  const loaded = await loadCloudState();
+  if (!loaded) {
+    throw new Error(cloudStatus || "Khong tai duoc du lieu quy tu Supabase.");
+  }
+  return true;
 }
 
 function queueCloudSave() {
@@ -844,10 +880,14 @@ function allTotals() {
 }
 
 function render() {
-  saveState();
   saveSession();
   renderAuth();
   if (!session) return;
+  if (session.cloud && !cloudLoaded) {
+    renderCloudLoadingState();
+    return;
+  }
+  saveState();
   renderStats();
   renderMemberOptions();
   renderMembers();
@@ -870,6 +910,22 @@ function renderFundBankForm() {
   els.fundBankAccount.value = fund.bankAccountNumber || "";
   els.fundBankName.value = fund.bankAccountName || "";
   els.fundTransferTemplate.value = fund.transferTemplate || "QAC-{MA_THANH_VIEN}";
+}
+
+function renderCloudLoadingState() {
+  els.totalFund.textContent = "...";
+  els.totalSpent.textContent = "...";
+  els.memberCount.textContent = "...";
+  els.pendingCount.textContent = "...";
+  els.memberList.innerHTML = `<div class="empty">Dang tai du lieu quy tu Supabase...</div>`;
+  els.participantList.innerHTML = `<div class="empty">Dang tai thanh vien...</div>`;
+  els.qrBoard.innerHTML = `<div class="empty">Dang tai ma nap quy...</div>`;
+  els.depositRequestList.innerHTML = "";
+  els.eventPreview.innerHTML = "";
+  els.sharedHistory.innerHTML = "";
+  els.eventHistory.innerHTML = "";
+  els.ledger.innerHTML = "";
+  els.notificationList.innerHTML = "";
 }
 
 function renderAuth() {
@@ -925,7 +981,7 @@ async function switchActiveFund(fundId) {
   state = emptyState();
   cloudLoaded = false;
   saveSession();
-  await loadCloudState();
+  await loadCloudStateOrThrow();
   activateTab("members");
   render();
 }
@@ -1809,7 +1865,7 @@ function bindEvents() {
       const authResult = await cloudClient.auth.signInWithPassword({ email, password });
       if (authResult.error) throw authResult.error;
       await loadCloudProfile(authResult.data.user);
-      await loadCloudState();
+      await loadCloudStateOrThrow();
 
       els.loginPassword.value = "";
       els.loginMessage.textContent = "";

@@ -30,6 +30,7 @@ const els = {
   invitePassword: document.querySelector("#invitePassword"),
   inviteSignupMessage: document.querySelector("#inviteSignupMessage"),
   fundSelect: document.querySelector("#fundSelect"),
+  quickActionButton: document.querySelector("#quickActionButton"),
   currentUserName: document.querySelector("#currentUserName"),
   currentRole: document.querySelector("#currentRole"),
   logoutButton: document.querySelector("#logoutButton"),
@@ -862,6 +863,7 @@ function renderAuth() {
   const loggedIn = Boolean(session);
   els.loginScreen.hidden = loggedIn;
   els.appShell.hidden = !loggedIn;
+  document.body.classList.toggle("is-logged-in", loggedIn);
   document.body.classList.toggle("is-admin", isAdmin());
   document.body.classList.toggle("is-member", isMember());
 
@@ -1701,6 +1703,27 @@ function activateTab(tabId) {
   document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
 }
 
+function focusPrimaryAction(tabId) {
+  const targets = {
+    members: els.memberName,
+    deposit: isMember() ? els.requestAmount : els.depositAmount,
+    events: els.expenseName || els.eventName,
+    history: els.ledger,
+    notifications: els.notificationList,
+  };
+  const target = targets[tabId];
+  target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  if (target?.focus && !target.disabled) {
+    setTimeout(() => target.focus(), 220);
+  }
+}
+
+function activateQuickTab(tabId) {
+  activateTab(tabId);
+  renderEventPreview();
+  focusPrimaryAction(tabId);
+}
+
 function requireAdmin() {
   if (isAdmin()) return true;
   alert("Chức năng này chỉ dành cho tài khoản quản trị.");
@@ -1791,7 +1814,7 @@ function bindEvents() {
       await switchActiveFund(event.target.value);
     } catch (error) {
       console.error(error);
-      alert(error.message || "KhĂ´ng chuyá»ƒn Ä‘Æ°á»£c quá»¹.");
+      alert(error.message || "Khong chuyen duoc quy.");
       renderAuth();
     }
   });
@@ -1801,6 +1824,18 @@ function bindEvents() {
       activateTab(button.dataset.tab);
       renderEventPreview();
     });
+  });
+
+  document.querySelectorAll("[data-quick-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!session) return;
+      activateQuickTab(button.dataset.quickTab);
+    });
+  });
+
+  els.quickActionButton?.addEventListener("click", () => {
+    if (!session) return;
+    activateQuickTab(isAdmin() ? "events" : "deposit");
   });
 
   els.memberForm.addEventListener("submit", async (event) => {

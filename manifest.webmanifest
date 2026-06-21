@@ -3,8 +3,8 @@
   "short_name": "Quỹ Ăn Chơi",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f5f7fb",
-  "theme_color": "#0f172a",
+  "background_color": "#f0fdfa",
+  "theme_color": "#0f766e",
   "orientation": "portrait",
   "icons": [
     {

@@ -121,7 +121,7 @@
         <nav class="tabs" aria-label="Chức năng">
           <button class="tab active" type="button" data-tab="members">Thành viên</button>
           <button class="tab" type="button" data-tab="deposit">Nạp quỹ</button>
-          <button class="tab" type="button" data-tab="events">Buổi ăn/nhậu</button>
+          <button class="tab" type="button" data-tab="events">Chi phí/buổi</button>
           <button class="tab" type="button" data-tab="history">Lịch sử</button>
           <button class="tab" type="button" data-tab="notifications">Thông báo</button>
           <button class="tab" type="button" data-tab="features">Đề xuất</button>
@@ -236,8 +236,24 @@
           <div class="section-head">
             <div>
               <h2>Tạo buổi ăn/nhậu</h2>
-              <p>Chọn người tham gia, nhập tổng bill, tiền khách lạ và cách tính. Hệ thống tự trừ số dư từng người.</p>
+              <p>Tạo buổi ăn/nhậu hoặc khoản chi chung. Hệ thống tự trừ số dư thành viên theo phần được phân bổ.</p>
             </div>
+          </div>
+
+          <div class="two-column admin-only">
+            <form id="expenseForm" class="card-form">
+              <h3>Tạo khoản chi chung</h3>
+              <label>
+                Tên khoản chi
+                <input id="expenseName" placeholder="Ví dụ: mua đá, thuê loa, gửi xe..." required />
+              </label>
+              <label>
+                Số tiền
+                <input id="expenseAmount" type="number" min="1000" step="1000" placeholder="300000" required />
+              </label>
+              <button type="submit">Tạo khoản chi và chia đều</button>
+              <p class="hint">Khoản chi sẽ được chia đều và trừ vào tất cả thành viên hiện có trong quỹ.</p>
+            </form>
           </div>
 
           <form id="eventForm" class="event-form admin-only">
@@ -276,7 +292,7 @@
           <div id="eventPreview" class="preview-box admin-only"></div>
 
           <div class="pending-section">
-            <h3>Lịch sử buổi ăn/nhậu</h3>
+            <h3>Lịch sử khoản chi và buổi ăn/nhậu</h3>
             <div id="eventHistory" class="ledger"></div>
           </div>
         </section>

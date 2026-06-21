@@ -61,6 +61,9 @@ const els = {
   requestNote: document.querySelector("#requestNote"),
   depositRequestList: document.querySelector("#depositRequestList"),
   eventForm: document.querySelector("#eventForm"),
+  expenseForm: document.querySelector("#expenseForm"),
+  expenseName: document.querySelector("#expenseName"),
+  expenseAmount: document.querySelector("#expenseAmount"),
   eventName: document.querySelector("#eventName"),
   eventAmount: document.querySelector("#eventAmount"),
   guestAmount: document.querySelector("#guestAmount"),
@@ -1107,7 +1110,7 @@ function renderEventHistory() {
   if (!els.eventHistory) return;
   const events = visibleEvents().sort((a, b) => b.createdAt - a.createdAt);
   if (!events.length) {
-    els.eventHistory.innerHTML = `<div class="empty">Chưa có buổi ăn/nhậu nào.</div>`;
+    els.eventHistory.innerHTML = `<div class="empty">Chưa có khoản chi hoặc buổi ăn/nhậu nào.</div>`;
     return;
   }
 
@@ -1134,7 +1137,7 @@ function renderEventHistory() {
           <div class="pending-actions">
             <button class="ghost" type="button" data-rename-event="${event.id}">Sửa tên</button>
             <button class="ghost" type="button" data-adjust-event="${event.id}">Điều chỉnh tiền</button>
-            <button class="ghost danger" type="button" data-delete-event="${event.id}">Xóa buổi</button>
+            <button class="ghost danger" type="button" data-delete-event="${event.id}">Xóa</button>
           </div>
         `
         : "";
@@ -1272,6 +1275,64 @@ function calculateEventShares() {
   }
 
   return shares;
+}
+
+function splitAmountAcrossMembers(total, members, reason) {
+  if (!total || !members.length) return [];
+  const baseShare = Math.floor(total / members.length);
+  let remainder = total - baseShare * members.length;
+  return members.map((member) => {
+    let amount = baseShare;
+    if (remainder > 0) {
+      amount += 1;
+      remainder -= 1;
+    }
+    return { member, amount, reason };
+  });
+}
+
+async function createAllocatedExpense({ name, totalAmount, shares, type = "event", guestAmount = 0, guestOwnerMemberId = null }) {
+  const eventId = makeId("event");
+  const createdAt = Date.now();
+  const splitMode = type === "shared-expense" ? "equal" : els.splitMode.value;
+  state.events = state.events || [];
+  state.eventParticipants = state.eventParticipants || [];
+  state.events.push({
+    id: eventId,
+    name,
+    totalAmount,
+    guestAmount,
+    guestOwnerMemberId,
+    splitMode,
+    createdBy: session?.email || "",
+    createdAt,
+  });
+
+  for (const share of shares) {
+    state.eventParticipants.push({
+      eventId,
+      memberId: share.member.id,
+      chargedAmount: share.amount,
+      note: share.reason,
+    });
+    state.ledger.push(
+      makeLedger("event-share", share.member.id, share.amount, share.reason, createdAt, {
+        eventId,
+        eventName: name,
+      }),
+    );
+  }
+
+  const title = type === "shared-expense" ? "Bạn được phân bổ khoản chi chung" : "Bạn được phân bổ chi phí buổi ăn/nhậu";
+  await addNotifications(
+    shares.map((share) =>
+      makeNotification(
+        share.member.id,
+        title,
+        `"${name}" đã được tạo. Phần của bạn là ${money(share.amount)}.`,
+      ),
+    ),
+  );
 }
 
 function addDeposit(memberId, amount, note) {
@@ -1449,7 +1510,7 @@ async function renameEvent(eventId) {
   const notifications = participants.map((participant) =>
     makeNotification(
       participant.memberId,
-      "Buổi ăn/nhậu được đổi tên",
+      "Khoản phân bổ được đổi tên",
       `Admin đổi "${oldName}" thành "${event.name}". Phần tiền của bạn không thay đổi.`,
     ),
   );
@@ -1509,7 +1570,7 @@ async function adjustEventTotal(eventId) {
   const notifications = newShares.map((share) =>
     makeNotification(
       share.memberId,
-      "Buổi ăn/nhậu được điều chỉnh tiền",
+      "Khoản phân bổ được điều chỉnh tiền",
       `Admin điều chỉnh "${event.name}". Phần mới của bạn là ${money(share.chargedAmount)}.`,
     ),
   );
@@ -1535,14 +1596,14 @@ async function deleteEvent(eventId) {
   if (!requireAdmin()) return;
   const event = (state.events || []).find((item) => item.id === eventId);
   if (!event) return;
-  if (!confirm(`Xóa buổi "${event.name}" và hoàn lại phần tiền đã trừ?`)) return;
+  if (!confirm(`Xóa "${event.name}" và hoàn lại phần tiền đã trừ?`)) return;
 
   const participants = eventParticipantsFor(eventId);
   const notifications = participants.map((participant) =>
     makeNotification(
       participant.memberId,
-      "Buổi ăn/nhậu đã bị xóa",
-      `Admin đã xóa "${event.name}". Phần tiền đã trừ của buổi này được gỡ khỏi số dư của bạn.`,
+      "Khoản phân bổ đã bị xóa",
+      `Admin đã xóa "${event.name}". Phần tiền đã trừ được gỡ khỏi số dư của bạn.`,
     ),
   );
 
@@ -1847,43 +1908,40 @@ function bindEvents() {
       return;
     }
     const eventName = els.eventName.value.trim() || "Buổi ăn/nhậu";
-    const eventId = makeId("event");
-    state.events = state.events || [];
-    state.eventParticipants = state.eventParticipants || [];
-    state.events.push({
-      id: eventId,
+    await createAllocatedExpense({
       name: eventName,
       totalAmount: Number(els.eventAmount.value) || 0,
       guestAmount: Number(els.guestAmount.value) || 0,
       guestOwnerMemberId: els.guestOwner.value || null,
-      splitMode: els.splitMode.value,
-      createdBy: session?.email || "",
-      createdAt: Date.now(),
+      shares,
+      type: "event",
     });
-    for (const share of shares) {
-      state.eventParticipants.push({
-        eventId,
-        memberId: share.member.id,
-        chargedAmount: share.amount,
-        note: share.reason,
-      });
-      state.ledger.push(
-        makeLedger("event-share", share.member.id, share.amount, share.reason, Date.now(), {
-          eventId,
-          eventName,
-        }),
-      );
-    }
-    await addNotifications(
-      shares.map((share) =>
-        makeNotification(
-          share.member.id,
-          "Bạn được phân bổ chi phí buổi ăn/nhậu",
-          `Buổi "${eventName}" đã được tạo. Phần của bạn là ${money(share.amount)}.`,
-        ),
-      ),
-    );
     els.eventForm.reset();
+    render();
+  });
+
+  els.expenseForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!requireAdmin()) return;
+    const name = els.expenseName.value.trim();
+    const amount = Math.round(Number(els.expenseAmount.value) || 0);
+    const members = state.members || [];
+    if (!name || !amount) {
+      alert("Vui lòng nhập tên khoản chi và số tiền.");
+      return;
+    }
+    if (!members.length) {
+      alert("Cần có thành viên trước khi tạo khoản chi.");
+      return;
+    }
+    const shares = splitAmountAcrossMembers(amount, members, "Khoản chi chung chia đều cho tất cả thành viên");
+    await createAllocatedExpense({
+      name,
+      totalAmount: amount,
+      shares,
+      type: "shared-expense",
+    });
+    els.expenseForm.reset();
     render();
   });
 

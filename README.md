@@ -8,12 +8,13 @@ Prototype web/PWA cho nhóm bạn quản lý quỹ ăn chơi:
 - Ghi nhận khoản nộp quỹ thủ công.
 - Thành viên bấm `Tôi đã chuyển khoản` để tạo yêu cầu nộp quỹ chờ admin xác nhận.
 - Mô phỏng sao kê ngân hàng: hệ thống đọc nội dung chuyển khoản, tìm mã nạp và tự cộng tiền cho thành viên.
+- Tạo khoản chi chung và tự chia đều cho tất cả thành viên.
 - Tạo buổi ăn/nhậu, chọn thành viên tham gia và tự phân bổ bill.
 - Gán tiền người lạ/khách mời cho một người trong nhóm.
 - Mỗi thành viên xem được đã nộp, đã dùng và số dư còn lại.
 - Lịch sử giao dịch theo dạng sổ cái để truy vết tiền vào/tiền ra.
 
-Admin đăng nhập bằng Supabase Auth, có thể quản lý thành viên, nộp quỹ, mô phỏng sao kê, tạo buổi ăn/nhậu và xem toàn bộ lịch sử.
+Admin đăng nhập bằng Supabase Auth, có thể quản lý thành viên, nộp quỹ, mô phỏng sao kê, tạo khoản chi, tạo buổi ăn/nhậu và xem toàn bộ lịch sử.
 
 Thành viên đăng nhập bằng Supabase Auth, chỉ xem số dư cá nhân, mã nạp của mình và lịch sử giao dịch của mình.
 

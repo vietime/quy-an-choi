@@ -246,36 +246,78 @@ label {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
+  min-width: min(100%, 520px);
 }
 
 .user-pill {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 9px 12px;
+  min-height: 44px;
+  padding: 7px 10px;
   background: #ffffff;
   color: #334155;
   font-size: 13px;
 }
 
+.user-pill span {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .user-pill strong {
-  color: var(--primary);
-  font-size: 12px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+  font-size: 11px;
   text-transform: uppercase;
 }
 
 .fund-switcher {
-  min-width: 190px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 180px;
   max-width: 260px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 6px 8px 6px 10px;
+  background: #ffffff;
   color: var(--primary-dark);
 }
 
+.fund-switcher span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .fund-switcher select {
-  padding: 9px 34px 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  padding: 5px 24px 5px 4px;
   font-size: 13px;
   font-weight: 700;
+  box-shadow: none;
+}
+
+.logout-icon {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.logout-icon span {
+  display: none;
 }
 
 .app-header {
@@ -914,9 +956,10 @@ body.is-logged-in .fab {
 
   .header-actions {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     justify-content: stretch;
-    align-items: stretch;
+    align-items: center;
+    min-width: 0;
   }
 
   .fund-switcher {
@@ -926,10 +969,29 @@ body.is-logged-in .fab {
 
   .user-pill {
     min-width: 0;
+    width: fit-content;
   }
 
   .user-pill span {
-    max-width: 160px;
+    display: none;
+  }
+
+  .user-pill strong {
+    padding: 7px 9px;
+  }
+
+  .logout-icon {
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+  }
+
+  .fund-switcher select {
+    min-width: 0;
+  }
+
+  .fund-switcher span {
+    max-width: 34px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1053,14 +1115,6 @@ body.is-logged-in .fab {
 
   .app-title .intro {
     font-size: 14px;
-  }
-
-  .header-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .header-actions #logoutButton {
-    width: 100%;
   }
 
   .quick-action {

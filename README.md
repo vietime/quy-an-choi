@@ -28,7 +28,7 @@ MVP hiện hỗ trợ:
 - Admin copy link mời gửi qua Zalo/Messenger.
 - Thành viên mở link hoặc dán mã mời ở màn `Tham gia bằng mã mời`, tự tạo tài khoản và được gắn vào quỹ với role `member`.
 
-Giới hạn hiện tại: một tài khoản chỉ gắn với một quỹ trong bảng `profiles`. Nếu cần một người tham gia nhiều quỹ, cần đổi khóa chính `profiles` sang cặp `(user_id, fund_id)`.
+Hiện hệ thống hỗ trợ một tài khoản tham gia nhiều quỹ. Mỗi dòng trong bảng `profiles` là một membership theo cặp `(user_id, fund_id)`; khi tài khoản có nhiều quỹ, giao diện hiển thị dropdown `Quỹ đang dùng` ở header để chuyển quỹ.
 
 ## Chạy local
 

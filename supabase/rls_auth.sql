@@ -1,15 +1,19 @@
 create table if not exists public.profiles (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
   fund_id text not null references public.funds(id) on delete cascade,
   member_id text references public.fund_members(id) on delete set null,
   role text not null check (role in ('admin', 'member')),
   display_name text not null,
   email text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  primary key (user_id, fund_id)
 );
 
 create index if not exists profiles_fund_id_idx on public.profiles(fund_id);
 create index if not exists profiles_member_id_idx on public.profiles(member_id);
+create unique index if not exists profiles_fund_member_unique_idx
+on public.profiles(fund_id, member_id)
+where member_id is not null;
 
 alter table public.profiles enable row level security;
 

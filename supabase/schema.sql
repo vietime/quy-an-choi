@@ -106,13 +106,14 @@ create table if not exists public.event_participants (
 );
 
 create table if not exists public.profiles (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
   fund_id text not null references public.funds(id) on delete cascade,
   member_id text references public.fund_members(id) on delete set null,
   role text not null check (role in ('admin', 'member')),
   display_name text not null,
   email text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  primary key (user_id, fund_id)
 );
 
 create index if not exists fund_members_fund_id_idx on public.fund_members(fund_id);
@@ -127,6 +128,9 @@ create index if not exists fund_invites_code_idx on public.fund_invites(invite_c
 create index if not exists events_fund_id_created_at_idx on public.events(fund_id, created_at desc);
 create index if not exists profiles_fund_id_idx on public.profiles(fund_id);
 create index if not exists profiles_member_id_idx on public.profiles(member_id);
+create unique index if not exists profiles_fund_member_unique_idx
+on public.profiles(fund_id, member_id)
+where member_id is not null;
 
 alter table public.funds enable row level security;
 alter table public.fund_members enable row level security;

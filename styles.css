@@ -170,6 +170,17 @@ label {
   text-transform: uppercase;
 }
 
+.fund-switcher {
+  min-width: 190px;
+  max-width: 260px;
+}
+
+.fund-switcher select {
+  padding: 9px 34px 9px 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .app-header {
   display: flex;
   align-items: flex-start;

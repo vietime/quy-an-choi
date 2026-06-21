@@ -29,6 +29,7 @@ const els = {
   inviteEmail: document.querySelector("#inviteEmail"),
   invitePassword: document.querySelector("#invitePassword"),
   inviteSignupMessage: document.querySelector("#inviteSignupMessage"),
+  fundSelect: document.querySelector("#fundSelect"),
   currentUserName: document.querySelector("#currentUserName"),
   currentRole: document.querySelector("#currentRole"),
   logoutButton: document.querySelector("#logoutButton"),
@@ -170,26 +171,51 @@ async function loadSupabaseAuthSession() {
   const authResult = await cloudClient.auth.getSession();
   const authSession = authResult.data?.session;
   if (!authSession?.user) return false;
-  return loadCloudProfile(authSession.user);
+  return loadCloudProfile(authSession.user, session?.fundId);
 }
 
-async function loadCloudProfile(user) {
+function profileFromRow(row, user) {
+  const relatedFund = Array.isArray(row.funds) ? row.funds[0] : row.funds;
+  return {
+    role: row.role,
+    name: row.display_name,
+    email: row.email || user?.email || "",
+    memberId: row.member_id,
+    fundId: row.fund_id,
+    fundName: relatedFund?.name || row.fund_name || row.fund_id,
+    userId: row.user_id || user?.id,
+  };
+}
+
+async function loadCloudProfiles(user) {
   const { data, error } = await cloudClient
     .from("profiles")
-    .select("*")
+    .select("*, funds(name)")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single();
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
+  return (data || []).map((row) => profileFromRow(row, user));
+}
+
+async function loadCloudProfile(user, preferredFundId = null) {
+  const profiles = await loadCloudProfiles(user);
+  if (!profiles.length) return false;
+
+  const selected =
+    profiles.find((profile) => profile.fundId === preferredFundId) ||
+    profiles.find((profile) => profile.fundId === session?.fundId) ||
+    profiles[0];
+
   session = {
-    role: data.role,
-    name: data.display_name,
-    email: data.email || user.email,
-    memberId: data.member_id,
-    fundId: data.fund_id,
+    role: selected.role,
+    name: selected.name,
+    email: selected.email || user.email,
+    memberId: selected.memberId,
+    fundId: selected.fundId,
+    fundName: selected.fundName,
     userId: user.id,
+    profiles,
     cloud: true,
   };
   return true;
@@ -235,21 +261,33 @@ function friendlyAuthError(error) {
   return error;
 }
 
-async function signUpAndGetUser(email, password, displayName) {
+async function signInAndGetUser(email, password) {
+  const signInResult = await cloudClient.auth.signInWithPassword({ email, password });
+  if (signInResult.error) throw friendlyAuthError(signInResult.error);
+  if (!signInResult.data.user || !signInResult.data.session) {
+    throw new Error("Khong dang nhap duoc tai khoan.");
+  }
+  return signInResult.data.user;
+}
+
+async function signUpAndGetUser(email, password, displayName, options = {}) {
   const signUpResult = await cloudClient.auth.signUp({
     email,
     password,
     options: { data: { display_name: displayName } },
   });
-  if (signUpResult.error) throw friendlyAuthError(signUpResult.error);
+  if (signUpResult.error) {
+    if (options.signInExisting && /user already registered|already registered/i.test(signUpResult.error.message || "")) {
+      return signInAndGetUser(email, password);
+    }
+    throw friendlyAuthError(signUpResult.error);
+  }
 
   let user = signUpResult.data.user;
   let authSession = signUpResult.data.session;
   if (!authSession) {
-    const signInResult = await cloudClient.auth.signInWithPassword({ email, password });
-    if (signInResult.error) throw friendlyAuthError(signInResult.error);
-    user = signInResult.data.user;
-    authSession = signInResult.data.session;
+    user = await signInAndGetUser(email, password);
+    authSession = (await cloudClient.auth.getSession()).data?.session;
   }
 
   if (!user || !authSession) {
@@ -267,12 +305,12 @@ async function registerOwnerAccount() {
   if (!name || !email || !password || !fundName) throw new Error("Vui lòng nhập đủ thông tin.");
 
   const user = await signUpAndGetUser(email, password, name);
-  const { error } = await cloudClient.rpc("create_fund_for_current_user", {
+  const { data, error } = await cloudClient.rpc("create_fund_for_current_user", {
     fund_name: fundName,
     display_name: name,
   });
   if (error) throw error;
-  await loadCloudProfile(user);
+  await loadCloudProfile(user, data?.[0]?.fund_id);
   await loadCloudState();
 }
 
@@ -284,13 +322,13 @@ async function registerWithInvite() {
   const password = els.invitePassword.value;
   if (!code || !name || !email || !password) throw new Error("Vui lòng nhập đủ thông tin.");
 
-  const user = await signUpAndGetUser(email, password, name);
-  const { error } = await cloudClient.rpc("accept_fund_invite", {
+  const user = await signUpAndGetUser(email, password, name, { signInExisting: true });
+  const { data, error } = await cloudClient.rpc("accept_fund_invite", {
     invite_code_input: code,
     display_name: name,
   });
   if (error) throw error;
-  await loadCloudProfile(user);
+  await loadCloudProfile(user, data?.[0]?.fund_id);
   await loadCloudState();
 }
 
@@ -831,6 +869,18 @@ function renderAuth() {
   const roleText = isAdmin() ? "Admin" : "Thành viên";
   els.currentUserName.textContent = `${session.name} (${session.email})`;
   els.currentRole.textContent = roleText;
+  if (els.fundSelect) {
+    const profiles = session.profiles || [];
+    els.fundSelect.hidden = profiles.length <= 1;
+    els.fundSelect.disabled = profiles.length <= 1;
+    els.fundSelect.innerHTML = profiles
+      .map(
+        (profile) =>
+          `<option value="${escapeHtml(profile.fundId)}">${escapeHtml(profile.fundName || profile.fundId)}</option>`,
+      )
+      .join("");
+    els.fundSelect.value = session.fundId;
+  }
 
 }
 
@@ -843,6 +893,27 @@ function renderStats() {
   els.totalSpent.textContent = money(totals.spent);
   els.memberCount.textContent = state.members.length;
   els.pendingCount.textContent = isAdmin() ? pending : "Ẩn";
+}
+
+async function switchActiveFund(fundId) {
+  if (!session?.cloud || !fundId || fundId === session.fundId) return;
+  const selected = (session.profiles || []).find((profile) => profile.fundId === fundId);
+  if (!selected) return;
+  session = {
+    ...session,
+    role: selected.role,
+    name: selected.name,
+    email: selected.email || session.email,
+    memberId: selected.memberId,
+    fundId: selected.fundId,
+    fundName: selected.fundName,
+  };
+  state = emptyState();
+  cloudLoaded = false;
+  saveSession();
+  await loadCloudState();
+  activateTab("members");
+  render();
 }
 
 function renderMemberOptions() {
@@ -1713,6 +1784,16 @@ function bindEvents() {
     }
     session = null;
     render();
+  });
+
+  els.fundSelect?.addEventListener("change", async (event) => {
+    try {
+      await switchActiveFund(event.target.value);
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "KhĂ´ng chuyá»ƒn Ä‘Æ°á»£c quá»¹.");
+      renderAuth();
+    }
   });
 
   document.querySelectorAll(".tab").forEach((button) => {

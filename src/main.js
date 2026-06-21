@@ -354,6 +354,19 @@ async function loadCloudState() {
 
     if (membersResult.error) throw membersResult.error;
 
+    const profilesResult = await cloudClient
+      .from("profiles")
+      .select("member_id, role")
+      .eq("fund_id", activeFundId());
+
+    if (profilesResult.error) throw profilesResult.error;
+
+    const roleByMemberId = new Map(
+      (profilesResult.data || [])
+        .filter((profile) => profile.member_id)
+        .map((profile) => [profile.member_id, profile.role]),
+    );
+
     if (!membersResult.data.length) {
       state = emptyState();
       state.fund = fundFromRow(fundResult.data);
@@ -422,7 +435,7 @@ async function loadCloudState() {
 
     const loadedState = {
       fund: fundFromRow(fundResult.data),
-      members: membersResult.data.map(memberFromRow),
+      members: membersResult.data.map((row) => memberFromRow(row, roleByMemberId.get(row.id))),
       ledger: ledgerResult.data.map(ledgerFromRow),
       depositRequests: requestResult.data.map(depositRequestFromRow),
       notifications: notificationResult.data.map(notificationFromRow),
@@ -553,12 +566,13 @@ function memberToRow(member) {
   };
 }
 
-function memberFromRow(row) {
+function memberFromRow(row, role = "member") {
   return {
     id: row.id,
     name: row.name,
     wallet: row.wallet || "",
     code: row.code,
+    role: role || "member",
     createdAt: new Date(row.created_at).getTime(),
   };
 }
@@ -923,7 +937,10 @@ async function switchActiveFund(fundId) {
 
 function renderMemberOptions() {
   const optionHtml = state.members
-    .map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`)
+    .map((member) => {
+      const label = member.role === "admin" ? `${member.name} (Admin)` : member.name;
+      return `<option value="${member.id}">${escapeHtml(label)}</option>`;
+    })
     .join("");
 
   els.depositMember.innerHTML = optionHtml;
@@ -942,7 +959,8 @@ function renderMembers() {
       const totals = getMemberTotals(member.id);
       const balance = totals.deposited - totals.spent;
       const balanceClass = balance < 0 ? "negative" : "positive";
-      const removeButton = isAdmin()
+      const roleBadge = member.role === "admin" ? `<span class="member-role-badge">ADMIN</span>` : "";
+      const removeButton = isAdmin() && member.role !== "admin"
         ? `<button class="ghost danger icon-button" type="button" data-remove-member="${member.id}">${icon("trash")}<span>Xóa</span></button>`
         : "";
       return `
@@ -950,7 +968,7 @@ function renderMembers() {
           <div class="member-top">
             <div class="card-avatar">${icon("users")}</div>
             <div>
-              <p class="member-name">${escapeHtml(member.name)}</p>
+              <p class="member-name">${escapeHtml(member.name)} ${roleBadge}</p>
               <div class="member-code">${escapeHtml(member.code)}</div>
             </div>
             ${removeButton}
@@ -1017,7 +1035,10 @@ function renderParticipants() {
       (member) => `
         <label class="check-row">
           <input type="checkbox" name="participant" value="${member.id}" checked />
-          <span>${escapeHtml(member.name)}</span>
+          <span class="participant-name">
+            <span>${escapeHtml(member.name)}</span>
+            ${member.role === "admin" ? `<span class="member-role-badge">ADMIN</span>` : ""}
+          </span>
         </label>
       `,
     )

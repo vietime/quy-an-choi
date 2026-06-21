@@ -368,12 +368,7 @@ async function loadCloudState() {
     );
 
     if (!membersResult.data.length) {
-      state = emptyState();
-      state.fund = fundFromRow(fundResult.data);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      cloudLoaded = true;
-      cloudStatus = "Supabase/PostgreSQL";
-      return true;
+      throw new Error("Khong tai duoc danh sach thanh vien cua quy. Vui long dang nhap lai.");
     }
 
     const ledgerResult = await cloudClient
@@ -2147,7 +2142,13 @@ async function init() {
     try {
       const restored = await loadSupabaseAuthSession();
       if (restored) {
-        await loadCloudState();
+        const loaded = await loadCloudState();
+        if (!loaded) {
+          session = null;
+          state = emptyState();
+          saveSession();
+          localStorage.removeItem(STORAGE_KEY);
+        }
       } else {
         session = null;
       }
@@ -2156,6 +2157,11 @@ async function init() {
       session = null;
       cloudStatus = "Chưa đăng nhập Supabase";
     }
+  } else if (session?.cloud) {
+    session = null;
+    state = emptyState();
+    saveSession();
+    cloudStatus = "Khong tai duoc Supabase. Vui long mo lai trang.";
   } else if (session) {
     await loadCloudState();
   }

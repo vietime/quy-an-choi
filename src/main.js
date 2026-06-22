@@ -83,6 +83,7 @@ let cloudClient = createCloudClient();
 let cloudLoaded = false;
 let cloudSaveTimer = null;
 let cloudStatus = cloudClient ? "Đang chờ đồng bộ" : "Chưa cấu hình máy chủ";
+const pendingMemberStatus = new Set();
 let state = loadState();
 let session = loadSession();
 
@@ -1093,11 +1094,12 @@ function renderMembers() {
       const balance = totals.deposited - totals.spent;
       const balanceClass = balance < 0 ? "negative" : "positive";
       const isInactive = (member.status || "active") === "inactive";
+      const isSavingStatus = pendingMemberStatus.has(member.id);
       const roleBadge = member.role === "admin" ? `<span class="member-role-badge">ADMIN</span>` : "";
       const statusBadge = isInactive ? `<span class="member-role-badge inactive">\u0110\u00e3 ngh\u1ec9</span>` : "";
       const toggleButton =
         isAdmin() && member.role !== "admin"
-          ? `<button class="ghost ${isInactive ? "" : "danger"} icon-button" type="button" data-toggle-member="${member.id}">${icon(isInactive ? "check" : "trash")}<span>${isInactive ? "K\u00edch ho\u1ea1t l\u1ea1i" : "Ng\u1eebng tham gia"}</span></button>`
+          ? `<button class="ghost ${isInactive ? "" : "danger"} icon-button" type="button" data-toggle-member="${member.id}" ${isSavingStatus ? "disabled" : ""}>${icon(isInactive ? "check" : "trash")}<span>${isSavingStatus ? "\u0110ang l\u01b0u..." : isInactive ? "K\u00edch ho\u1ea1t l\u1ea1i" : "Ng\u1eebng tham gia"}</span></button>`
           : "";
       return `
         <article class="member-card ${isInactive ? "inactive-member" : ""}">
@@ -2092,18 +2094,29 @@ function bindEvents() {
     const id = event.target.closest("[data-toggle-member]")?.dataset.toggleMember;
     if (!id || !requireAdmin()) return;
     const member = state.members.find((item) => item.id === id);
-    if (!member) return;
+    if (!member || pendingMemberStatus.has(id)) return;
+    const previousStatus = member.status || "active";
     const nextStatus = (member.status || "active") === "inactive" ? "active" : "inactive";
     member.status = nextStatus;
-    if (cloudClient && session?.cloud) {
-      const { error } = await cloudClient
-        .from("fund_members")
-        .update({ status: nextStatus })
-        .eq("id", id)
-        .eq("fund_id", activeFundId());
-      if (error) throw error;
-    }
+    pendingMemberStatus.add(id);
     render();
+    try {
+      if (cloudClient && session?.cloud) {
+        const { error } = await cloudClient
+          .from("fund_members")
+          .update({ status: nextStatus })
+          .eq("id", id)
+          .eq("fund_id", activeFundId());
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error(error);
+      member.status = previousStatus;
+      alert(error.message || "Khong luu duoc trang thai thanh vien.");
+    } finally {
+      pendingMemberStatus.delete(id);
+      render();
+    }
   });
   els.depositForm.addEventListener("submit", (event) => {
     event.preventDefault();

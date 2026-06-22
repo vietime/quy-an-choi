@@ -93,6 +93,7 @@ function activeFundId() {
 function emptyState() {
   return {
     fund: emptyFund(),
+    summary: null,
     members: [],
     ledger: [],
     events: [],
@@ -374,6 +375,12 @@ async function loadCloudState() {
       await ensureCurrentProfileMember(activeFundId());
     }
 
+    const summaryResult = await cloudClient.rpc("get_fund_summary", {
+      target_fund_id: activeFundId(),
+    });
+    if (summaryResult.error) throw summaryResult.error;
+    const fundSummary = fundSummaryFromRow(summaryResult.data?.[0]);
+
     const membersResult = await cloudClient
       .from("fund_members")
       .select("*")
@@ -458,6 +465,7 @@ async function loadCloudState() {
 
     const loadedState = {
       fund: fundFromRow(fundResult.data),
+      summary: fundSummary,
       members: membersResult.data.map((row) => memberFromRow(row, roleByMemberId.get(row.id))),
       ledger: ledgerResult.data.map(ledgerFromRow),
       depositRequests: requestResult.data.map(depositRequestFromRow),
@@ -632,6 +640,22 @@ function ledgerFromRow(row) {
     eventId: row.event_id || null,
     eventName: row.event_name || "",
     createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function fundSummaryFromRow(row) {
+  if (!row) return null;
+  return {
+    fundId: row.summary_fund_id,
+    memberCount: Number(row.member_count) || 0,
+    totalDeposited: Number(row.total_deposited) || 0,
+    totalSpent: Number(row.total_spent) || 0,
+    totalBalance: Number(row.total_balance) || 0,
+    myMemberId: row.my_member_id || "",
+    myDeposited: Number(row.my_deposited) || 0,
+    mySpent: Number(row.my_spent) || 0,
+    myBalance: Number(row.my_balance) || 0,
+    pendingCount: Number(row.pending_count) || 0,
   };
 }
 
@@ -889,6 +913,8 @@ function render() {
   }
   saveState();
   renderStats();
+  renderSummaryStatOverride();
+  renderReadableSummaryLabel();
   renderMemberOptions();
   renderMembers();
   renderInvites();
@@ -956,13 +982,37 @@ function renderAuth() {
 
 function renderStats() {
   const totals = allTotals();
+  const summary = state.summary || null;
   const pendingLedger = state.ledger.filter((entry) => entry.type === "pending").length;
   const pendingRequests = (state.depositRequests || []).filter((request) => request.status === "pending").length;
   const pending = pendingLedger + pendingRequests;
-  els.totalFund.textContent = money(totals.deposited - totals.spent);
-  els.totalSpent.textContent = money(totals.spent);
-  els.memberCount.textContent = state.members.length;
+  const totalBalance = summary ? summary.totalBalance : totals.deposited - totals.spent;
+  const totalSpent = summary ? summary.totalSpent : totals.spent;
+  const memberCount = summary ? summary.memberCount : state.members.length;
+  els.totalFund.textContent = money(totalBalance);
+  els.totalSpent.textContent = money(totalSpent);
+  els.memberCount.textContent = memberCount;
   els.pendingCount.textContent = isAdmin() ? pending : "Ẩn";
+}
+
+function renderSummaryStatOverride() {
+  const summary = state.summary || null;
+  if (!summary) return;
+  const statLabel = els.pendingCount.closest(".stat-card")?.querySelector("span");
+  if (isAdmin()) {
+    if (statLabel) statLabel.innerHTML = `${icon("bell")}Chá» xá»­ lĂ½`;
+    els.pendingCount.textContent = summary.pendingCount;
+  } else {
+    if (statLabel) statLabel.innerHTML = `${icon("wallet")}Sá»‘ dÆ° cá»§a báº¡n`;
+    els.pendingCount.textContent = money(summary.myBalance);
+  }
+}
+
+function renderReadableSummaryLabel() {
+  if (!state.summary) return;
+  const statLabel = els.pendingCount.closest(".stat-card")?.querySelector("span");
+  if (!statLabel) return;
+  statLabel.innerHTML = isAdmin() ? `${icon("bell")}Cho xu ly` : `${icon("wallet")}So du cua ban`;
 }
 
 async function switchActiveFund(fundId) {

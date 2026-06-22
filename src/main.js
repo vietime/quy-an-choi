@@ -335,6 +335,39 @@ async function registerWithInvite() {
   await loadCloudStateOrThrow();
 }
 
+async function acceptInviteForCurrentAccount(inviteCode, options = {}) {
+  const code = extractInviteCode(inviteCode);
+  if (!cloudClient || !code) return false;
+  const authSession = (await cloudClient.auth.getSession()).data?.session;
+  const authUser = options.user || authSession?.user;
+  if (!authUser) return false;
+  const displayName =
+    (session?.name || authUser.user_metadata?.display_name || authUser.email || "").trim() || "Thanh vien";
+  const { data, error } = await cloudClient.rpc("accept_fund_invite", {
+    invite_code_input: code,
+    display_name: displayName,
+  });
+  if (error) {
+    if (/da tham gia quy nay|already/i.test(error.message || "")) {
+      await loadCloudProfile(authUser);
+      await loadCloudStateOrThrow();
+      if (options.clearUrl) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      return false;
+    }
+    throw error;
+  }
+  if (authUser) {
+    await loadCloudProfile(authUser, data?.[0]?.fund_id);
+    await loadCloudStateOrThrow();
+  }
+  if (options.clearUrl) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+  return true;
+}
+
 async function ensureCurrentProfileMember(fundId = activeFundId()) {
   if (!cloudClient || !session?.cloud || !fundId) return null;
   const { data, error } = await cloudClient.rpc("ensure_current_profile_member", {
@@ -1919,8 +1952,13 @@ function bindEvents() {
       els.loginMessage.textContent = "Đang đăng nhập...";
       const authResult = await cloudClient.auth.signInWithPassword({ email, password });
       if (authResult.error) throw authResult.error;
-      await loadCloudProfile(authResult.data.user);
-      await loadCloudStateOrThrow();
+      const inviteCode = new URLSearchParams(window.location.search).get("invite");
+      if (inviteCode) {
+        await acceptInviteForCurrentAccount(inviteCode, { clearUrl: true, user: authResult.data.user });
+      } else {
+        await loadCloudProfile(authResult.data.user);
+        await loadCloudStateOrThrow();
+      }
 
       els.loginPassword.value = "";
       els.loginMessage.textContent = "";
@@ -2249,19 +2287,29 @@ function bindEvents() {
 }
 
 async function init() {
+  const initialInvite = new URLSearchParams(window.location.search).get("invite");
   if (cloudClient) {
     try {
       const restored = await loadSupabaseAuthSession();
       if (restored) {
-        const loaded = await loadCloudState();
-        if (!loaded) {
-          session = null;
-          state = emptyState();
-          saveSession();
-          localStorage.removeItem(STORAGE_KEY);
+        if (initialInvite && confirm("Tham gia quy bang ma moi nay?")) {
+          await acceptInviteForCurrentAccount(initialInvite, { clearUrl: true });
+        } else {
+          const loaded = await loadCloudState();
+          if (!loaded) {
+            session = null;
+            state = emptyState();
+            saveSession();
+            localStorage.removeItem(STORAGE_KEY);
+          }
         }
       } else {
-        session = null;
+        const authSession = (await cloudClient.auth.getSession()).data?.session;
+        if (initialInvite && authSession?.user && confirm("Tham gia quy bang ma moi nay?")) {
+          await acceptInviteForCurrentAccount(initialInvite, { clearUrl: true, user: authSession.user });
+        } else {
+          session = null;
+        }
       }
     } catch (error) {
       console.error(error);

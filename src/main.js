@@ -67,8 +67,10 @@ const els = {
   expenseForm: document.querySelector("#expenseForm"),
   expenseName: document.querySelector("#expenseName"),
   expenseAmount: document.querySelector("#expenseAmount"),
+  expenseCommonSupport: document.querySelector("#expenseCommonSupport"),
   eventName: document.querySelector("#eventName"),
   eventAmount: document.querySelector("#eventAmount"),
+  eventCommonSupport: document.querySelector("#eventCommonSupport"),
   guestAmount: document.querySelector("#guestAmount"),
   guestOwner: document.querySelector("#guestOwner"),
   splitMode: document.querySelector("#splitMode"),
@@ -84,7 +86,6 @@ let cloudClient = createCloudClient();
 let cloudLoaded = false;
 let cloudSaveTimer = null;
 let cloudStatus = cloudClient ? "Đang chờ đồng bộ" : "Chưa cấu hình máy chủ";
-      if (entry.type === "balance-donation") title = "\u1ee6ng h\u1ed9 qu\u1ef9 khi ngh\u1ec9";
 const pendingMemberStatus = new Set();
 let state = loadState();
 let session = loadSession();
@@ -940,7 +941,7 @@ function getMemberTotals(memberId) {
 }
 
 function allTotals() {
-  return state.members.reduce(
+  const totals = state.members.reduce(
     (totals, member) => {
       const memberTotals = getMemberTotals(member.id);
       totals.deposited += memberTotals.deposited;
@@ -948,8 +949,30 @@ function allTotals() {
       totals.donated += memberTotals.donated;
       return totals;
     },
-    { deposited: 0, spent: 0, donated: 0 },
+    { deposited: 0, spent: 0, donated: 0, commonSupport: 0 },
   );
+  totals.commonSupport = (state.ledger || [])
+    .filter((entry) => entry.type === "common-fund-support")
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  totals.spent += totals.commonSupport;
+  return totals;
+}
+
+function availableCommonSupport() {
+  if (state.summary) return Math.max(0, state.summary.donatedBalance || 0);
+  const totals = allTotals();
+  return Math.max(0, (totals.donated || 0) - (totals.commonSupport || 0));
+}
+
+function readCommonSupport(input, billTotal) {
+  const amount = Math.round(Number(input?.value) || 0);
+  if (amount < 0) throw new Error("S\u1ed1 ti\u1ec1n qu\u1ef9 chung h\u1ed7 tr\u1ee3 kh\u00f4ng h\u1ee3p l\u1ec7.");
+  if (amount > billTotal) throw new Error("Qu\u1ef9 chung h\u1ed7 tr\u1ee3 kh\u00f4ng \u0111\u01b0\u1ee3c l\u1edbn h\u01a1n t\u1ed5ng bill.");
+  const available = availableCommonSupport();
+  if (amount > available) {
+    throw new Error(`Qu\u1ef9 chung \u0111\u01b0\u1ee3c \u1ee7ng h\u1ed9 hi\u1ec7n ch\u1ec9 c\u00f2n ${money(available)}.`);
+  }
+  return amount;
 }
 
 function render() {
@@ -1041,7 +1064,7 @@ function renderStats() {
   els.totalSpent.textContent = money(totalSpent);
   els.memberCount.textContent = memberCount;
   if (els.donatedFund) {
-    els.donatedFund.textContent = money(summary ? summary.donatedBalance : totals.donated || 0);
+    els.donatedFund.textContent = money(summary ? summary.donatedBalance : Math.max(0, (totals.donated || 0) - (totals.commonSupport || 0)));
   }
   els.pendingCount.textContent = isAdmin() ? pending : "Ẩn";
 }
@@ -1328,13 +1351,32 @@ function fakeQrSvg(code) {
 }
 
 function renderEventPreview() {
-  const shares = calculateEventShares();
+  const total = Number(els.eventAmount.value) || 0;
+  let commonSupportAmount = 0;
+  try {
+    commonSupportAmount = readCommonSupport(els.eventCommonSupport, total);
+  } catch {
+    commonSupportAmount = 0;
+  }
+  const shares = calculateEventShares(commonSupportAmount);
   if (!shares.length) {
     els.eventPreview.innerHTML = `<div class="empty">Chọn thành viên và nhập tổng bill để xem trước phân bổ.</div>`;
     return;
   }
 
-  els.eventPreview.innerHTML = shares
+  const supportRow = commonSupportAmount
+    ? `
+        <div class="split-row support-row">
+          <div>
+            <strong>D\u00f9ng qu\u1ef9 chung h\u1ed7 tr\u1ee3 bill</strong>
+            <div class="ledger-meta">Tr\u1eeb v\u00e0o ch\u1ec9 s\u1ed1 Qu\u1ef9 chung \u0111\u01b0\u1ee3c \u1ee7ng h\u1ed9</div>
+          </div>
+          <strong>-${money(commonSupportAmount)}</strong>
+        </div>
+      `
+    : "";
+
+  els.eventPreview.innerHTML = supportRow + shares
     .map(
       (share) => `
         <div class="split-row">
@@ -1351,6 +1393,12 @@ function renderEventPreview() {
 
 function eventParticipantsFor(eventId) {
   return (state.eventParticipants || []).filter((participant) => participant.eventId === eventId);
+}
+
+function commonSupportForEvent(eventId) {
+  return (state.ledger || [])
+    .filter((entry) => entry.eventId === eventId && entry.type === "common-fund-support")
+    .reduce((sum, entry) => sum + entry.amount, 0);
 }
 
 function visibleEvents() {
@@ -1382,8 +1430,21 @@ function renderExpenseHistory(target, expenseType, emptyText) {
   target.innerHTML = events
     .map((event) => {
       const participants = eventParticipantsFor(event.id);
-      const total = participants.reduce((sum, item) => sum + item.chargedAmount, 0);
+      const chargedTotal = participants.reduce((sum, item) => sum + item.chargedAmount, 0);
+      const commonSupport = commonSupportForEvent(event.id);
+      const total = event.totalAmount || chargedTotal + commonSupport;
       const eventIcon = expenseType === "shared-expense" ? "receipt" : "sparkle";
+      const supportDetail = commonSupport
+        ? `
+            <div class="split-row support-row">
+              <div>
+                <strong>D\u00f9ng qu\u1ef9 chung h\u1ed7 tr\u1ee3 bill</strong>
+                <div class="ledger-meta">Kh\u00f4ng tr\u1eeb v\u00e0o s\u1ed1 d\u01b0 c\u00e1 nh\u00e2n</div>
+              </div>
+              <strong>${money(commonSupport)}</strong>
+            </div>
+          `
+        : "";
       const detailRows = participants
         .map((participant) => {
           const member = memberById(participant.memberId);
@@ -1419,7 +1480,7 @@ function renderExpenseHistory(target, expenseType, emptyText) {
           </div>
           <details>
             <summary>Xem chi tiết phân bổ</summary>
-            <div class="event-detail">${detailRows}</div>
+            <div class="event-detail">${supportDetail}${detailRows}</div>
           </details>
         </article>
       `;
@@ -1476,9 +1537,9 @@ function renderLedger() {
     .sort((a, b) => b.createdAt - a.createdAt)
     .map((entry) => {
       const member = memberById(entry.memberId);
-      const sign = entry.type === "deposit" ? "+" : entry.type === "event-share" ? "-" : "";
+      const sign = entry.type === "deposit" ? "+" : entry.type === "event-share" || entry.type === "common-fund-support" ? "-" : "";
       const amountClass = entry.type === "deposit" || entry.type === "balance-donation" ? "in" : entry.type === "pending" ? "pending" : "out";
-      const rowIcon = entry.type === "deposit" ? "wallet" : entry.type === "pending" ? "bell" : entry.type === "balance-donation" ? "sparkle" : "receipt";
+      const rowIcon = entry.type === "deposit" ? "wallet" : entry.type === "pending" ? "bell" : entry.type === "balance-donation" || entry.type === "common-fund-support" ? "sparkle" : "receipt";
       let title =
         entry.type === "deposit"
           ? "Nộp quỹ"
@@ -1486,6 +1547,7 @@ function renderLedger() {
             ? `Chi phí: ${entry.eventName || "Buổi ăn/nhậu"}`
             : "Chưa nhận diện";
       if (entry.type === "balance-donation") title = "\u1ee6ng h\u1ed9 qu\u1ef9 khi ngh\u1ec9";
+      if (entry.type === "common-fund-support") title = "D\u00f9ng qu\u1ef9 chung h\u1ed7 tr\u1ee3 bill";
       return `
         <article class="ledger-row app-list-row transaction-row ${amountClass}">
           <div class="row-icon">${icon(rowIcon)}</div>
@@ -1507,7 +1569,7 @@ function selectedParticipantIds() {
   return Array.from(document.querySelectorAll('input[name="participant"]:checked')).map((input) => input.value);
 }
 
-function calculateEventShares() {
+function calculateEventShares(commonSupportAmount = 0) {
   const total = Number(els.eventAmount.value) || 0;
   const guestAmount = Number(els.guestAmount.value) || 0;
   const participantIds = selectedParticipantIds();
@@ -1516,11 +1578,12 @@ function calculateEventShares() {
   const participants = participantIds.map(memberById).filter(Boolean);
   const guestOwner = memberById(els.guestOwner.value);
   const mode = els.splitMode.value;
-  let baseTotal = total;
+  const billAfterSupport = Math.max(0, total - (Number(commonSupportAmount) || 0));
+  let baseTotal = billAfterSupport;
   const shares = [];
 
   if (mode === "equal" && guestAmount > 0) {
-    baseTotal = Math.max(0, total - guestAmount);
+    baseTotal = Math.max(0, billAfterSupport - guestAmount);
   }
 
   const baseShare = Math.floor(baseTotal / participants.length);
@@ -1557,7 +1620,7 @@ function calculateEventShares() {
 }
 
 function splitAmountAcrossMembers(total, members, reason) {
-  if (!total || !members.length) return [];
+  if ((!total && total !== 0) || !members.length) return [];
   const baseShare = Math.floor(total / members.length);
   let remainder = total - baseShare * members.length;
   return members.map((member) => {
@@ -1570,7 +1633,15 @@ function splitAmountAcrossMembers(total, members, reason) {
   });
 }
 
-async function createAllocatedExpense({ name, totalAmount, shares, type = "event", guestAmount = 0, guestOwnerMemberId = null }) {
+async function createAllocatedExpense({
+  name,
+  totalAmount,
+  shares,
+  type = "event",
+  guestAmount = 0,
+  guestOwnerMemberId = null,
+  commonSupportAmount = 0,
+}) {
   const eventId = makeId("event");
   const createdAt = Date.now();
   const splitMode = type === "shared-expense" ? "equal" : els.splitMode.value;
@@ -1601,6 +1672,28 @@ async function createAllocatedExpense({ name, totalAmount, shares, type = "event
         eventName: name,
       }),
     );
+  }
+
+  if (commonSupportAmount > 0) {
+    state.ledger.push(
+      makeLedger("common-fund-support", null, commonSupportAmount, "Dung quy chung ho tro bill", createdAt, {
+        eventId,
+        eventName: name,
+      }),
+    );
+  }
+
+  if (state.summary) {
+    const chargedTotal = shares.reduce((sum, share) => sum + share.amount, 0);
+    const spentDelta = chargedTotal + commonSupportAmount;
+    const myShare = shares
+      .filter((share) => share.member.id === state.summary.myMemberId)
+      .reduce((sum, share) => sum + share.amount, 0);
+    state.summary.totalSpent = (state.summary.totalSpent || 0) + spentDelta;
+    state.summary.totalBalance = (state.summary.totalBalance || 0) - spentDelta;
+    state.summary.donatedBalance = Math.max(0, (state.summary.donatedBalance || 0) - commonSupportAmount);
+    state.summary.mySpent = (state.summary.mySpent || 0) + myShare;
+    state.summary.myBalance = (state.summary.myBalance || 0) - myShare;
   }
 
   const title = type === "shared-expense" ? "Bạn được phân bổ khoản chi chung" : "Bạn được phân bổ chi phí buổi ăn/nhậu";
@@ -1814,7 +1907,7 @@ async function adjustEventTotal(eventId) {
   if (!requireAdmin()) return;
   const event = (state.events || []).find((item) => item.id === eventId);
   if (!event) return;
-  const currentTotal = eventParticipantsFor(eventId).reduce((sum, item) => sum + item.chargedAmount, 0);
+  const currentTotal = event.totalAmount || eventParticipantsFor(eventId).reduce((sum, item) => sum + item.chargedAmount, 0);
   const raw = prompt("Nhập tổng tiền mới:", String(currentTotal || event.totalAmount || 0));
   if (!raw) return;
   const newTotal = Number(raw);
@@ -1823,7 +1916,12 @@ async function adjustEventTotal(eventId) {
     return;
   }
 
-  const newShares = recalculatedEventShares(eventId, Math.round(newTotal));
+  const commonSupport = commonSupportForEvent(eventId);
+  if (Math.round(newTotal) < commonSupport) {
+    alert(`T\u1ed5ng ti\u1ec1n m\u1edbi kh\u00f4ng \u0111\u01b0\u1ee3c nh\u1ecf h\u01a1n ph\u1ea7n qu\u1ef9 chung \u0111\u00e3 h\u1ed7 tr\u1ee3 (${money(commonSupport)}).`);
+    return;
+  }
+  const newShares = recalculatedEventShares(eventId, Math.max(0, Math.round(newTotal) - commonSupport));
   if (!newShares.length) return;
 
   event.totalAmount = Math.round(newTotal);
@@ -2303,7 +2401,15 @@ function bindEvents() {
   els.eventForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!requireAdmin()) return;
-    const shares = calculateEventShares();
+    const totalAmount = Math.round(Number(els.eventAmount.value) || 0);
+    let commonSupportAmount = 0;
+    try {
+      commonSupportAmount = readCommonSupport(els.eventCommonSupport, totalAmount);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    const shares = calculateEventShares(commonSupportAmount);
     if (!shares.length) {
       alert("Cần nhập tổng bill và chọn ít nhất một thành viên.");
       return;
@@ -2311,9 +2417,10 @@ function bindEvents() {
     const eventName = els.eventName.value.trim() || "Buổi ăn/nhậu";
     await createAllocatedExpense({
       name: eventName,
-      totalAmount: Number(els.eventAmount.value) || 0,
+      totalAmount,
       guestAmount: Number(els.guestAmount.value) || 0,
       guestOwnerMemberId: els.guestOwner.value || null,
+      commonSupportAmount,
       shares,
       type: "event",
     });
@@ -2326,7 +2433,7 @@ function bindEvents() {
     if (!requireAdmin()) return;
     const name = els.expenseName.value.trim();
     const amount = Math.round(Number(els.expenseAmount.value) || 0);
-    const members = state.members || [];
+    const members = activeMembers();
     if (!name || !amount) {
       alert("Vui lòng nhập tên khoản chi và số tiền.");
       return;
@@ -2335,10 +2442,19 @@ function bindEvents() {
       alert("Cần có thành viên trước khi tạo khoản chi.");
       return;
     }
-    const shares = splitAmountAcrossMembers(amount, members, "Khoản chi chung chia đều cho tất cả thành viên");
+    let commonSupportAmount = 0;
+    try {
+      commonSupportAmount = readCommonSupport(els.expenseCommonSupport, amount);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    const sharedAmount = Math.max(0, amount - commonSupportAmount);
+    const shares = splitAmountAcrossMembers(sharedAmount, members, "Khoản chi chung chia đều cho tất cả thành viên");
     await createAllocatedExpense({
       name,
       totalAmount: amount,
+      commonSupportAmount,
       shares,
       type: "shared-expense",
     });

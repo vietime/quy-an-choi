@@ -947,7 +947,6 @@ function render() {
   saveState();
   renderStats();
   renderSummaryStatOverride();
-  renderReadableSummaryLabel();
   renderMemberOptions();
   renderMembers();
   renderInvites();
@@ -1033,19 +1032,12 @@ function renderSummaryStatOverride() {
   if (!summary) return;
   const statLabel = els.pendingCount.closest(".stat-card")?.querySelector("span");
   if (isAdmin()) {
-    if (statLabel) statLabel.innerHTML = `${icon("bell")}Chá» xá»­ lĂ½`;
+    if (statLabel) statLabel.innerHTML = `${icon("bell")}Ch\u1edd x\u1eed l\u00fd`;
     els.pendingCount.textContent = summary.pendingCount;
   } else {
-    if (statLabel) statLabel.innerHTML = `${icon("wallet")}Sá»‘ dÆ° cá»§a báº¡n`;
+    if (statLabel) statLabel.innerHTML = `${icon("wallet")}S\u1ed1 d\u01b0 c\u1ee7a b\u1ea1n`;
     els.pendingCount.textContent = money(summary.myBalance);
   }
-}
-
-function renderReadableSummaryLabel() {
-  if (!state.summary) return;
-  const statLabel = els.pendingCount.closest(".stat-card")?.querySelector("span");
-  if (!statLabel) return;
-  statLabel.innerHTML = isAdmin() ? `${icon("bell")}Cho xu ly` : `${icon("wallet")}So du cua ban`;
 }
 
 async function switchActiveFund(fundId) {

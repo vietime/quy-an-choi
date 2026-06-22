@@ -1093,7 +1093,7 @@ function renderMembers() {
       const totals = getMemberTotals(member.id);
       const balance = totals.deposited - totals.spent;
       const balanceClass = balance < 0 ? "negative" : "positive";
-      const isInactive = (member.status || "active") === "inactive";
+      const isInactive = (member.status || "active") !== "active";
       const isSavingStatus = pendingMemberStatus.has(member.id);
       const roleBadge = member.role === "admin" ? `<span class="member-role-badge">ADMIN</span>` : "";
       const statusBadge = isInactive ? `<span class="member-role-badge inactive">\u0110\u00e3 ngh\u1ec9</span>` : "";
@@ -2096,7 +2096,7 @@ function bindEvents() {
     const member = state.members.find((item) => item.id === id);
     if (!member || pendingMemberStatus.has(id)) return;
     const previousStatus = member.status || "active";
-    const nextStatus = (member.status || "active") === "inactive" ? "active" : "inactive";
+    const nextStatus = (member.status || "active") !== "active" ? "active" : "inactive";
     member.status = nextStatus;
     pendingMemberStatus.add(id);
     render();

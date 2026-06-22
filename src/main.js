@@ -634,6 +634,7 @@ function memberToRow(member) {
     name: member.name,
     wallet: member.wallet || null,
     code: member.code,
+    status: member.status || "active",
     created_at: new Date(member.createdAt || Date.now()).toISOString(),
   };
 }
@@ -644,6 +645,7 @@ function memberFromRow(row, role = "member") {
     name: row.name,
     wallet: row.wallet || "",
     code: row.code,
+    status: row.status || "active",
     role: role || "member",
     createdAt: new Date(row.created_at).getTime(),
   };
@@ -870,6 +872,7 @@ function makeMember(name) {
     name: name.trim(),
     wallet: "",
     code: `QAC${base}${suffix}`,
+    status: "active",
     createdAt: Date.now(),
   };
 }
@@ -901,6 +904,10 @@ function isMember() {
 function visibleMembers() {
   if (isAdmin()) return state.members;
   return state.members.filter((member) => member.id === session?.memberId);
+}
+
+function activeMembers() {
+  return state.members.filter((member) => (member.status || "active") === "active");
 }
 
 function visibleLedgerEntries() {
@@ -1062,7 +1069,7 @@ async function switchActiveFund(fundId) {
 }
 
 function renderMemberOptions() {
-  const optionHtml = state.members
+  const optionHtml = activeMembers()
     .map((member) => {
       const label = member.role === "admin" ? `${member.name} (Admin)` : member.name;
       return `<option value="${member.id}">${escapeHtml(label)}</option>`;
@@ -1076,7 +1083,7 @@ function renderMemberOptions() {
 function renderMembers() {
   const members = visibleMembers();
   if (!members.length) {
-    els.memberList.innerHTML = `<div class="empty">Chưa có thành viên nào.</div>`;
+    els.memberList.innerHTML = `<div class="empty">Chua co thanh vien nao.</div>`;
     return;
   }
 
@@ -1085,31 +1092,33 @@ function renderMembers() {
       const totals = getMemberTotals(member.id);
       const balance = totals.deposited - totals.spent;
       const balanceClass = balance < 0 ? "negative" : "positive";
+      const isInactive = (member.status || "active") === "inactive";
       const roleBadge = member.role === "admin" ? `<span class="member-role-badge">ADMIN</span>` : "";
-      const removeButton = isAdmin() && member.role !== "admin"
-        ? `<button class="ghost danger icon-button" type="button" data-remove-member="${member.id}">${icon("trash")}<span>Xóa</span></button>`
-        : "";
+      const statusBadge = isInactive ? `<span class="member-role-badge inactive">\u0110\u00e3 ngh\u1ec9</span>` : "";
+      const toggleButton =
+        isAdmin() && member.role !== "admin"
+          ? `<button class="ghost ${isInactive ? "" : "danger"} icon-button" type="button" data-toggle-member="${member.id}">${icon(isInactive ? "check" : "trash")}<span>${isInactive ? "K\u00edch ho\u1ea1t l\u1ea1i" : "Ng\u1eebng tham gia"}</span></button>`
+          : "";
       return `
-        <article class="member-card">
+        <article class="member-card ${isInactive ? "inactive-member" : ""}">
           <div class="member-top">
             <div class="card-avatar">${icon("users")}</div>
             <div>
-              <p class="member-name">${escapeHtml(member.name)} ${roleBadge}</p>
+              <p class="member-name">${escapeHtml(member.name)} ${roleBadge} ${statusBadge}</p>
               <div class="member-code">${escapeHtml(member.code)}</div>
             </div>
-            ${removeButton}
+            ${toggleButton}
           </div>
           <div class="balance ${balanceClass}">${money(balance)}</div>
           <div class="mini-stats">
-            <span>Đã nộp <strong>${money(totals.deposited)}</strong></span>
-            <span>Đã dùng <strong>${money(totals.spent)}</strong></span>
+            <span>\u0110\u00e3 n\u1ed9p <strong>${money(totals.deposited)}</strong></span>
+            <span>\u0110\u00e3 d\u00f9ng <strong>${money(totals.spent)}</strong></span>
           </div>
         </article>
       `;
     })
     .join("");
 }
-
 function renderInvites() {
   if (!els.inviteList) return;
   if (!isAdmin()) {
@@ -1151,12 +1160,13 @@ function renderInvites() {
 }
 
 function renderParticipants() {
-  if (!state.members.length) {
+  const members = activeMembers();
+  if (!members.length) {
     els.participantList.innerHTML = `<div class="empty">Thêm thành viên trước khi tạo buổi.</div>`;
     return;
   }
 
-  els.participantList.innerHTML = state.members
+  els.participantList.innerHTML = members
     .map(
       (member) => `
         <label class="check-row">
@@ -2078,18 +2088,23 @@ function bindEvents() {
     }
   });
 
-  els.memberList.addEventListener("click", (event) => {
-    const id = event.target.closest("[data-remove-member]")?.dataset.removeMember;
+  els.memberList.addEventListener("click", async (event) => {
+    const id = event.target.closest("[data-toggle-member]")?.dataset.toggleMember;
     if (!id || !requireAdmin()) return;
-    const hasLedger = state.ledger.some((entry) => entry.memberId === id);
-    if (hasLedger) {
-      alert("Thành viên đã có giao dịch, không nên xóa để giữ lịch sử. Bản thật nên dùng trạng thái 'ngừng tham gia'.");
-      return;
+    const member = state.members.find((item) => item.id === id);
+    if (!member) return;
+    const nextStatus = (member.status || "active") === "inactive" ? "active" : "inactive";
+    member.status = nextStatus;
+    if (cloudClient && session?.cloud) {
+      const { error } = await cloudClient
+        .from("fund_members")
+        .update({ status: nextStatus })
+        .eq("id", id)
+        .eq("fund_id", activeFundId());
+      if (error) throw error;
     }
-    state.members = state.members.filter((member) => member.id !== id);
     render();
   });
-
   els.depositForm.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!requireAdmin()) return;

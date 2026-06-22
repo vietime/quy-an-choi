@@ -654,6 +654,15 @@ h3 {
   letter-spacing: 0.04em;
 }
 
+.member-role-badge.inactive {
+  background: #e5e7eb;
+  color: #64748b;
+}
+
+.inactive-member {
+  opacity: 0.72;
+}
+
 .member-top,
 .ledger-row {
   display: flex;

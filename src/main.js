@@ -1097,6 +1097,11 @@ function renderParticipants() {
 }
 
 function renderQrBoard() {
+  if (isAdmin()) {
+    els.qrBoard.innerHTML = "";
+    return;
+  }
+
   const members = visibleMembers();
   if (!members.length) {
     els.qrBoard.innerHTML = `<div class="empty">Chưa có mã nạp để hiển thị.</div>`;

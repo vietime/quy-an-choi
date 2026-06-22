@@ -38,6 +38,7 @@ const els = {
   totalSpent: document.querySelector("#totalSpent"),
   memberCount: document.querySelector("#memberCount"),
   pendingCount: document.querySelector("#pendingCount"),
+  donatedFund: document.querySelector("#donatedFund"),
   memberForm: document.querySelector("#memberForm"),
   memberName: document.querySelector("#memberName"),
   memberEmail: document.querySelector("#memberEmail"),
@@ -83,6 +84,7 @@ let cloudClient = createCloudClient();
 let cloudLoaded = false;
 let cloudSaveTimer = null;
 let cloudStatus = cloudClient ? "Đang chờ đồng bộ" : "Chưa cấu hình máy chủ";
+      if (entry.type === "balance-donation") title = "\u1ee6ng h\u1ed9 qu\u1ef9 khi ngh\u1ec9";
 const pendingMemberStatus = new Set();
 let state = loadState();
 let session = loadSession();
@@ -687,6 +689,7 @@ function fundSummaryFromRow(row) {
     totalDeposited: Number(row.total_deposited) || 0,
     totalSpent: Number(row.total_spent) || 0,
     totalBalance: Number(row.total_balance) || 0,
+    donatedBalance: Number(row.donated_balance) || 0,
     myMemberId: row.my_member_id || "",
     myDeposited: Number(row.my_deposited) || 0,
     mySpent: Number(row.my_spent) || 0,
@@ -926,9 +929,13 @@ function getMemberTotals(memberId) {
       if (entry.memberId !== memberId) return totals;
       if (entry.type === "deposit") totals.deposited += entry.amount;
       if (entry.type === "event-share") totals.spent += entry.amount;
+      if (entry.type === "balance-donation") {
+        totals.spent += entry.amount;
+        totals.donated += entry.amount;
+      }
       return totals;
     },
-    { deposited: 0, spent: 0 },
+    { deposited: 0, spent: 0, donated: 0 },
   );
 }
 
@@ -937,10 +944,11 @@ function allTotals() {
     (totals, member) => {
       const memberTotals = getMemberTotals(member.id);
       totals.deposited += memberTotals.deposited;
-      totals.spent += memberTotals.spent;
+      totals.spent += memberTotals.spent - memberTotals.donated;
+      totals.donated += memberTotals.donated;
       return totals;
     },
-    { deposited: 0, spent: 0 },
+    { deposited: 0, spent: 0, donated: 0 },
   );
 }
 
@@ -1032,6 +1040,9 @@ function renderStats() {
   els.totalFund.textContent = money(totalBalance);
   els.totalSpent.textContent = money(totalSpent);
   els.memberCount.textContent = memberCount;
+  if (els.donatedFund) {
+    els.donatedFund.textContent = money(summary ? summary.donatedBalance : totals.donated || 0);
+  }
   els.pendingCount.textContent = isAdmin() ? pending : "Ẩn";
 }
 
@@ -1271,6 +1282,7 @@ function renderDepositRequests() {
       const memberName = member?.name || request.memberName || "Không rõ thành viên";
       const statusText =
         request.status === "approved" ? "Đã xác nhận" : request.status === "rejected" ? "Đã từ chối" : "Chờ xác nhận";
+      if (entry.type === "balance-donation") title = "\u1ee6ng h\u1ed9 qu\u1ef9 khi ngh\u1ec9";
       const statusClass = request.status === "approved" ? "approved" : request.status === "rejected" ? "rejected" : "pending";
       const actions =
         isAdmin() && request.status === "pending"
@@ -1465,14 +1477,15 @@ function renderLedger() {
     .map((entry) => {
       const member = memberById(entry.memberId);
       const sign = entry.type === "deposit" ? "+" : entry.type === "event-share" ? "-" : "";
-      const amountClass = entry.type === "deposit" ? "in" : entry.type === "pending" ? "pending" : "out";
-      const rowIcon = entry.type === "deposit" ? "wallet" : entry.type === "pending" ? "bell" : "receipt";
-      const title =
+      const amountClass = entry.type === "deposit" || entry.type === "balance-donation" ? "in" : entry.type === "pending" ? "pending" : "out";
+      const rowIcon = entry.type === "deposit" ? "wallet" : entry.type === "pending" ? "bell" : entry.type === "balance-donation" ? "sparkle" : "receipt";
+      let title =
         entry.type === "deposit"
           ? "Nộp quỹ"
           : entry.type === "event-share"
             ? `Chi phí: ${entry.eventName || "Buổi ăn/nhậu"}`
             : "Chưa nhận diện";
+      if (entry.type === "balance-donation") title = "\u1ee6ng h\u1ed9 qu\u1ef9 khi ngh\u1ec9";
       return `
         <article class="ledger-row app-list-row transaction-row ${amountClass}">
           <div class="row-icon">${icon(rowIcon)}</div>
@@ -2097,11 +2110,34 @@ function bindEvents() {
     if (!member || pendingMemberStatus.has(id)) return;
     const previousStatus = member.status || "active";
     const nextStatus = (member.status || "active") !== "active" ? "active" : "inactive";
+    const memberBalance = getMemberTotals(member.id).deposited - getMemberTotals(member.id).spent;
+    let donationLedger = null;
+    if (nextStatus === "inactive" && memberBalance > 0) {
+      const donate = confirm(`${member.name} con ${money(memberBalance)} trong quy. Bam OK de ung ho so du nay cho quy va ngung tham gia.`);
+      if (!donate) return;
+      donationLedger = makeLedger(
+        "balance-donation",
+        member.id,
+        memberBalance,
+        `Ung ho quy khi ngung tham gia: ${member.name}`,
+        Date.now(),
+      );
+    }
     member.status = nextStatus;
+    if (donationLedger) state.ledger.push(donationLedger);
+    if (state.summary) {
+      if (previousStatus === "active" && nextStatus !== "active") state.summary.memberCount = Math.max(0, state.summary.memberCount - 1);
+      if (previousStatus !== "active" && nextStatus === "active") state.summary.memberCount += 1;
+      if (donationLedger) state.summary.donatedBalance = (state.summary.donatedBalance || 0) + donationLedger.amount;
+    }
     pendingMemberStatus.add(id);
     render();
     try {
       if (cloudClient && session?.cloud) {
+        if (donationLedger) {
+          const { error: ledgerError } = await cloudClient.from("ledger_entries").insert(ledgerToRow(donationLedger));
+          if (ledgerError) throw ledgerError;
+        }
         const { error } = await cloudClient
           .from("fund_members")
           .update({ status: nextStatus })
@@ -2112,6 +2148,12 @@ function bindEvents() {
     } catch (error) {
       console.error(error);
       member.status = previousStatus;
+      if (donationLedger) state.ledger = state.ledger.filter((entry) => entry.id !== donationLedger.id);
+      if (state.summary) {
+        if (previousStatus === "active" && nextStatus !== "active") state.summary.memberCount += 1;
+        if (previousStatus !== "active" && nextStatus === "active") state.summary.memberCount = Math.max(0, state.summary.memberCount - 1);
+        if (donationLedger) state.summary.donatedBalance = Math.max(0, (state.summary.donatedBalance || 0) - donationLedger.amount);
+      }
       alert(error.message || "Khong luu duoc trang thai thanh vien.");
     } finally {
       pendingMemberStatus.delete(id);
